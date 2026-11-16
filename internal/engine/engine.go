@@ -35,6 +35,10 @@ type Engine struct {
 	MaxAttempts int
 	// Backoff between attempts (default 200ms * 2^n).
 	Backoff func(attempt int) time.Duration
+
+	// After Run: the store snapshot and other machines' manifests it used.
+	LastSnapshot store.Snapshot
+	LastOthers   map[string]*manifest.Manifest
 }
 
 // Errors the CLI turns into plain messages.
@@ -322,7 +326,7 @@ func (r *run) scan(ctx context.Context) error {
 	// Tracked entries that were not listed: deleted or out of scope.
 	for _, p := range r.cur.Paths() {
 		en := r.cur.Entries[p]
-		if seen[p] || en.Deleted || en.Retired || en.Kind == manifest.KindOwned {
+		if seen[p] || en.Deleted || en.Retired {
 			continue
 		}
 		src := r.sourceFor(p)
@@ -340,7 +344,7 @@ func (r *run) scan(ctx context.Context) error {
 			}
 		}
 		switch en.Kind {
-		case manifest.KindText, manifest.KindBinary:
+		case manifest.KindText, manifest.KindBinary, manifest.KindOwned:
 			en.Tombstone(r.now)
 			r.report.Sent++
 		default:
@@ -378,7 +382,28 @@ func (r *run) exchange(ctx context.Context) error {
 		return err
 	}
 	r.decideAll()
+	r.e.LastSnapshot, r.e.LastOthers = snap, r.others
 	return r.publish(ctx)
+}
+
+// Content assembles an entry's content from a store snapshot.
+func Content(snap store.Snapshot, en *manifest.Entry) ([]byte, error) {
+	var buf bytes.Buffer
+	for _, ch := range en.Chunks {
+		sealed, err := snap.Get(blob.Path(ch))
+		if err != nil {
+			return nil, err
+		}
+		part, err := blob.OpenChunk(ch, sealed)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(part)
+	}
+	if blob.Hash(buf.Bytes()) != en.Hash {
+		return nil, blob.ErrCorrupt
+	}
+	return buf.Bytes(), nil
 }
 
 func (r *run) readOthers() error {

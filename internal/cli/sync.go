@@ -190,6 +190,11 @@ func runSync(ctx context.Context, app *App, w io.Writer, f syncFlags) error {
 			if line := attentionLine(rep, err); line != "" {
 				fmt.Fprintln(w, line)
 			}
+			if err == nil {
+				for _, wt := range findWaiting(app, cfg, eng) {
+					fmt.Fprintf(w, "Karvan: %s is waiting for %s. Run `karvan restore` in the project to bring it here.\n", wt.describe(time.Now()), wt.Project.ID)
+				}
+			}
 		}
 		if err != nil && f.hook == "" {
 			return err
@@ -197,6 +202,18 @@ func runSync(ctx context.Context, app *App, w io.Writer, f syncFlags) error {
 		return nil
 	}
 	printReport(w, rep, err)
+	for _, s := range eng.Sources {
+		if wp, ok := s.(*sources.WIP); ok {
+			for _, p := range wp.Problems {
+				fmt.Fprintf(w, "  unfinished work not saved: %s\n", p)
+			}
+		}
+	}
+	if err == nil {
+		for _, wt := range findWaiting(app, cfg, eng) {
+			fmt.Fprintf(w, "  %s is waiting for %s (`karvan restore`)\n", wt.describe(time.Now()), wt.Project.ID)
+		}
+	}
 	return err
 }
 

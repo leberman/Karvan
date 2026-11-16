@@ -14,6 +14,7 @@ import (
 // Build creates the sources a config asks for, and the project table for
 // the manifest.
 func Build(cfg *config.Config, env paths.Env) ([]engine.Source, map[string]manifest.Project) {
+	var wips []WIPProject
 	var out []engine.Source
 	projects := map[string]manifest.Project{}
 	excludedSkill := map[string]bool{}
@@ -51,6 +52,9 @@ func Build(cfg *config.Config, env paths.Env) ([]engine.Source, map[string]manif
 			out = append(out, &Dir{Label: "memory " + nameOf(p), Prefix: "project:" + pid + "/memory/", Root: env.Join(cdir, "memory")})
 		}
 		tps = append(tps, TranscriptProject{PID: pid, Path: p.Path, Dir: cdir})
+		if p.WIP {
+			wips = append(wips, WIPProject{PID: pid, ID: p.ID, Path: p.Path})
+		}
 	}
 	if cfg.Items.Transcripts && len(tps) > 0 {
 		out = append(out, &Transcripts{Projects: tps, HistoryDays: cfg.Sync.HistoryDays, SkipRecent: cfg.Sync.SkipRecent.Duration, GOOS: env.GOOS})
@@ -58,6 +62,9 @@ func Build(cfg *config.Config, env paths.Env) ([]engine.Source, map[string]manif
 	if cfg.Items.Desktop && len(tps) > 0 {
 		out = append(out, &Desktop{Projects: tps, Dir: env.DesktopSessionsDir(), GOOS: env.GOOS,
 			TranscriptsOn: cfg.Items.Transcripts, HistoryDays: cfg.Sync.HistoryDays})
+	}
+	if len(wips) > 0 {
+		out = append(out, &WIP{Machine: cfg.Machine, Projects: wips, Stage: env.Join(env.StateDir(), "wip")})
 	}
 	return out, projects
 }

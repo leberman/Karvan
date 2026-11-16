@@ -228,7 +228,7 @@ func TestSyncDesktopEntries(t *testing.T) {
 		t.Fatalf("home entry:\n%s", get(hEntry))
 	}
 	if get(filepath.Join(home.Env.DesktopSessionsDir(), "acct", "org", "local_2.json")) != "<missing>" {
-		t.Fatal("an entry outside the projects travelled")
+		t.Fatal("an entry outside the projects traveled")
 	}
 
 	// Newer activity at work; the app is open at home: wait and say so.

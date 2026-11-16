@@ -71,7 +71,7 @@ func TestHelpAndVersion(t *testing.T) {
 }
 
 func TestStubsExitNotImplemented(t *testing.T) {
-	for _, args := range [][]string{{"init"}, {"restore"}, {"restore", "home"}} {
+	for _, args := range [][]string{{"init"}} {
 		app, _, errb := newApp(t)
 		if code := Run(app, args); code != ExitNotImplemented {
 			t.Errorf("%v: exit %d, want %d", args, code, ExitNotImplemented)

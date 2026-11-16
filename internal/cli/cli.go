@@ -194,15 +194,6 @@ func newUninstallCmd(app *App) *cobra.Command {
 	}
 }
 
-func newRestoreCmd(_ *App) *cobra.Command {
-	return &cobra.Command{
-		Use:   "restore [machine]",
-		Short: "Bring back unfinished project work saved on another machine",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  func(*cobra.Command, []string) error { return notImplemented("restore", 8) },
-	}
-}
-
 func newVersionCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
