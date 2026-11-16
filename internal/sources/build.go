@@ -39,8 +39,7 @@ func Build(cfg *config.Config, env paths.Env) ([]engine.Source, map[string]manif
 	for _, f := range cfg.Items.Folders {
 		out = append(out, &Dir{Label: "folder " + f.Name, Prefix: "folder:" + f.Name + "/", Root: filepath.Clean(f.Path)})
 	}
-	type tp struct{ PID, Path, Dir string }
-	var tps []tp
+	var tps []TranscriptProject
 	for _, p := range cfg.Projects {
 		if excludedProject[p.ID] {
 			continue
@@ -51,9 +50,12 @@ func Build(cfg *config.Config, env paths.Env) ([]engine.Source, map[string]manif
 		if cfg.Items.Memory {
 			out = append(out, &Dir{Label: "memory " + nameOf(p), Prefix: "project:" + pid + "/memory/", Root: env.Join(cdir, "memory")})
 		}
-		tps = append(tps, tp{PID: pid, Path: p.Path, Dir: cdir})
+		tps = append(tps, TranscriptProject{PID: pid, Path: p.Path, Dir: cdir})
 	}
-	_ = tps // transcripts and desktop entries: phases 6 and 7
+	if cfg.Items.Transcripts && len(tps) > 0 {
+		out = append(out, &Transcripts{Projects: tps, HistoryDays: cfg.Sync.HistoryDays, SkipRecent: cfg.Sync.SkipRecent.Duration, GOOS: env.GOOS})
+	}
+	_ = tps // desktop entries: phase 7
 	return out, projects
 }
 

@@ -31,7 +31,7 @@ func TestNormalizeRemote(t *testing.T) {
 }
 
 func TestPIDAndDetect(t *testing.T) {
-	if PID("github.com/owner/app") != PID("github.com/owner/app") || len(PID("x")) != 18 || PID("a") == PID("b") {
+	if PID("github.com/owner/app") != "p-"+PID("github.com/owner/app")[2:] || len(PID("x")) != 18 || PID("a") == PID("b") {
 		t.Fatal("PID")
 	}
 	dir := t.TempDir()

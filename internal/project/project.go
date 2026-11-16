@@ -58,9 +58,7 @@ func NormalizeRemote(u string) (string, bool) {
 	if host == "ssh.github.com" {
 		host = "github.com"
 	}
-	if strings.HasPrefix(host, "altssh.") {
-		host = strings.TrimPrefix(host, "altssh.")
-	}
+	host = strings.TrimPrefix(host, "altssh.")
 	path = strings.Trim(path, "/")
 	path = strings.TrimSuffix(path, ".git")
 	if host == "" || path == "" {

@@ -121,3 +121,83 @@ func TestHooksQuiet(t *testing.T) {
 		t.Fatalf("hook printed %q", o)
 	}
 }
+
+func tline(uuid, parent, cwd, ts string) string {
+	p := "null"
+	if parent != "" {
+		p = `"` + parent + `"`
+	}
+	return `{"parentUuid":` + p + `,"cwd":"` + cwd + `","sessionId":"s1","type":"user","uuid":"` + uuid + `","timestamp":"2026-11-16T` + ts + `.000Z","message":{"content":"hi"}}`
+}
+
+// writeOld writes a file and dates it an hour back (so it is not "open").
+func writeOld(t *testing.T, p, content string) {
+	t.Helper()
+	put(t, p, content)
+	old := time.Now().Add(-time.Hour)
+	_ = os.Chtimes(p, old, old)
+}
+
+// PRD 15 #1 and #9 with real paths: the same conversation continued on both
+// machines keeps both sides; each machine sees its own project path; an
+// unfinished line never travels.
+func TestSyncTranscripts(t *testing.T) {
+	work, home, workProj, homeProj := twoMachines(t)
+	wfile := filepath.Join(work.Env.ClaudeProjectDir(workProj), "s1.jsonl")
+	hfile := filepath.Join(home.Env.ClaudeProjectDir(homeProj), "s1.jsonl")
+	base := tline("u1", "", workProj, "09:00:00") + "\n" + tline("u2", "u1", workProj, "09:01:00") + "\n"
+	writeOld(t, wfile, base+`{"parentUuid":"u2","cwd":"`) // unfinished line
+	run(t, work, "sync")
+	run(t, home, "sync")
+	got := get(hfile)
+	if strings.Count(got, "\n") != 2 || strings.Contains(got, workProj) || !strings.Contains(got, `"cwd":"`+homeProj+`"`) {
+		t.Fatalf("home transcript:\n%s", got)
+	}
+
+	// Both continue the conversation.
+	writeOld(t, wfile, base+tline("a1", "u2", workProj, "10:00:00")+"\n")
+	writeOld(t, hfile, get(hfile)+tline("b1", "u2", homeProj, "10:05:00")+"\n")
+	run(t, work, "sync")
+	run(t, home, "sync")
+	run(t, work, "sync")
+	w, h := get(wfile), get(hfile)
+	for _, id := range []string{"u1", "u2", "a1", "b1"} {
+		if !strings.Contains(w, `"uuid":"`+id+`"`) || !strings.Contains(h, `"uuid":"`+id+`"`) {
+			t.Fatalf("line %s missing:\nwork:\n%s\nhome:\n%s", id, w, h)
+		}
+	}
+	if strings.Contains(h, workProj) || strings.Contains(w, homeProj) {
+		t.Fatal("a machine got the other machine's path")
+	}
+	if strings.Count(w, "\n") != 4 || strings.Count(h, "\n") != 4 {
+		t.Fatalf("duplicates:\n%s", w)
+	}
+	// Same order on both machines: only the cwd differs.
+	if strings.ReplaceAll(w, workProj, "P") != strings.ReplaceAll(h, homeProj, "P") {
+		t.Fatalf("machines disagree:\n%s\n---\n%s", w, h)
+	}
+}
+
+// PRD 9-3: a conversation written in the last minutes is not overwritten;
+// it is merged on a later run.
+func TestSyncOpenTranscriptWaits(t *testing.T) {
+	work, home, workProj, homeProj := twoMachines(t)
+	wfile := filepath.Join(work.Env.ClaudeProjectDir(workProj), "s1.jsonl")
+	hfile := filepath.Join(home.Env.ClaudeProjectDir(homeProj), "s1.jsonl")
+	writeOld(t, wfile, tline("u1", "", workProj, "09:00:00")+"\n")
+	run(t, work, "sync")
+	run(t, home, "sync")
+	writeOld(t, wfile, get(wfile)+tline("a1", "u1", workProj, "10:00:00")+"\n")
+	run(t, work, "sync")
+	put(t, hfile, get(hfile)+tline("b1", "u1", homeProj, "10:05:00")+"\n") // open right now
+	out := run(t, home, "sync")
+	if !strings.Contains(out, "may be open") || strings.Contains(get(hfile), "a1") {
+		t.Fatalf("open conversation was touched:\n%s", out)
+	}
+	old := time.Now().Add(-time.Hour)
+	_ = os.Chtimes(hfile, old, old)
+	run(t, home, "sync")
+	if !strings.Contains(get(hfile), `"uuid":"a1"`) || !strings.Contains(get(hfile), `"uuid":"b1"`) {
+		t.Fatalf("not merged later:\n%s", get(hfile))
+	}
+}
