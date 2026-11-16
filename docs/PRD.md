@@ -1,267 +1,279 @@
-# PRD: Karvan (کاروان)
+# PRD: Karvan
 
-کار با Claude Code رو روی هر کدوم از کامپیوترهاتون، دقیقاً از همون جایی که ول کردید، ادامه بدید.
+Continue your Claude Code work on any of your computers, exactly where you left it.
 
-- وضعیت: پیش‌نویس ۲، ۱۴۰۵/۰۸/۲۵ (2026-11-16)
-- مسئول: نگهدارنده‌ی پروژه
-- زبان: Rust (قطعی)
-- اولین انتشار عمومی: فقط لینوکس؛ بعد ویندوز، بعد مک
+- Status: draft 3, 2026-11-16
+- Owner: the maintainer
+- Language and stack: Rust
+- License: MIT or Apache-2.0, at the user's option
+- First public release: Linux only; Windows next, then macOS
 
-> ابزار غیررسمی. Anthropic آن را نساخته و تأیید نکرده. فایل‌هایی را می‌خواند و می‌نویسد که Claude Code و
-> اپلیکیشن دسکتاپ Claude روی دیسک نگه می‌دارند؛ ساختار بعضی از آن‌ها مستند نیست و ممکن است عوض شود.
+> Unofficial tool. Not made or endorsed by Anthropic. It reads and writes files that Claude Code and
+> the Claude desktop app keep on disk; some of those formats are undocumented and can change.
 
-## ۱. مسئله
+## 1. Problem
 
-خیلی‌ها با Claude Code روی بیش از یک کامپیوتر کار می‌کنند (محل کار و خانه، دسکتاپ و لپ‌تاپ). هر چیزی که یک
-گفتگو را مفید می‌کند، روی همان سیستمی می‌ماند که گفتگو در آن انجام شده:
+People use Claude Code on more than one computer (work and home, desktop and laptop). Everything that
+makes a session useful stays on the machine where it happened:
 
-- تاریخچه‌ی گفتگوهای Claude Code (ترمینال و بخش Code اپلیکیشن دسکتاپ)؛
-- فهرست گفتگوها در اپلیکیشن دسکتاپ؛
-- دستورالعمل‌های شخصی (`CLAUDE.md`)، مهارت‌ها (skills) و حافظه‌ی هر پروژه؛
-- کار نیمه‌تمام در خود پروژه: شاخه، commitهایی که هنوز push نشده‌اند، تغییرات staged و unstaged.
+- the chat history of Claude Code sessions (CLI and the desktop app's Code tab);
+- the session list in the desktop app;
+- personal instructions (`CLAUDE.md`), skills and per-project memory;
+- unfinished work in the project itself: a branch, commits not pushed yet, staged and unstaged changes.
 
-رفتن به سیستم دیگر یعنی شروع از صفر: نه تاریخچه‌ای برای ادامه، نه حافظه‌ای، و کدی نیمه‌کاره روی سیستمی که الان
-خاموش است.
+Moving to the other machine means starting cold: no history to resume, no memory, and code left half
+done on the machine that is now off.
 
-یک نمونه‌ی شخصی (اسکریپت‌های bash و یک repo خصوصی git) در آبان ۱۴۰۵ بین دو سیستم Ubuntu اجرا شد و ایده را
-ثابت کرد. این محصول آن را به ابزاری تبدیل می‌کند که هر کسی بتواند نصبش کند.
+A personal prototype (bash scripts and a private git repository) ran between two Ubuntu machines in
+November 2026 and proved the idea. Karvan turns it into a tool anyone can install.
 
-## ۲. کاربران
+## 2. Users
 
-| کاربر | از چه استفاده می‌کند | چه لازم دارد |
+| User | Uses | Needs |
 | ---- | ---- | ----- |
-| برنامه‌نویس با دو سیستم یا بیشتر | Claude Code در ترمینال و/یا بخش Code اپلیکیشن | تاریخچه، حافظه، مهارت‌ها و کار نیمه‌تمام git روی همه‌ی سیستم‌ها |
-| غیربرنامه‌نویس | بخش Code اپلیکیشن دسکتاپ (و Cowork که خودش ابری است) | تاریخچه و فهرست گفتگوها روی همه‌ی سیستم‌ها، بدون نیاز به ترمینال، git یا GitHub |
+| Developer with two or more machines | Claude Code CLI and/or the desktop Code tab | History, memory, skills and unfinished git work on every machine |
+| Non-programmer | The desktop app's Code tab (and Cowork, which already runs in the cloud) | History and session list on every machine, with no terminal, git or GitHub knowledge |
 
-اولین نسخه‌ی لینوکس بیشتر برای برنامه‌نویس‌هاست؛ اما طراحی نباید راه غیربرنامه‌نویس‌ها را ببندد، چون برای
-ویندوز و مک مهم است.
+The first Linux release mostly targets developers; the design must not block the non-programmer path,
+which matters for Windows and macOS.
 
-## ۳. اهداف و غیراهداف
+## 3. Goals and non-goals
 
-### اهداف
+### Goals
 
-1. گفتگویی که روی یک سیستم شروع شده، روی سیستم دیگر قابل ادامه باشد: هم در ترمینال (`claude --resume`)
-   و هم در فهرست بخش Code اپلیکیشن.
-2. `CLAUDE.md`، مهارت‌ها و حافظه‌ی پروژه‌ها روی همه‌ی سیستم‌ها یکی باشد.
-3. برای برنامه‌نویس‌ها (اختیاری): کار نیمه‌تمام پروژه منتقل شود و با یک فرمان برگردد.
-4. حریم خصوصی به‌صورت پیش‌فرض: داده قبل از خروج از سیستم رمزنگاری شود؛ رمزها و توکن‌ها قبل از ارسال
-   شناسایی شوند.
-5. هیچ چیزی بی‌صدا از دست نرود: نه force push، نه بازنویسی داده‌ی جدیدتر؛ در تداخل هر دو طرف نگه داشته شوند.
-6. بعد از راه‌اندازی، خودکار کار کند: با hookهای Claude Code، یک زمان‌بند، و موقع خاموش شدن.
+1. A session started on one machine can be resumed on another, in the CLI (`claude --resume`) and in
+   the desktop app's Code tab list.
+2. `CLAUDE.md`, skills and per-project memory are the same on every machine.
+3. For developers (optional): unfinished project work travels and comes back with one command.
+4. Private by default: data is encrypted before it leaves the machine; secrets are caught before upload.
+5. Nothing is lost silently: no force pushes, no overwrite of newer data; a conflict keeps both sides.
+6. Hands-off once set up: syncs on its own (Claude Code hooks, a timer, at shutdown).
 
-### غیراهداف (نسخه‌ی ۱)
+### Non-goals (v1)
 
-- همکاری هم‌زمان یا همگام‌سازی بین افراد مختلف.
-- همگام‌سازی اطلاعات ورود، فایل‌های `.env` یا وضعیت ورود به حساب Claude.
-- همگام‌سازی گفتگوهای claude.ai یا Cowork (از قبل در فضای ابری ذخیره می‌شوند).
-- نسخه‌ی ویندوز و مک (کد نسخه‌ی ۱ باید قابل انتقال بماند؛ بخش ۱۱).
-- محصول رسمی Anthropic بودن.
+- Real-time collaboration or syncing between different people.
+- Syncing credentials, `.env` files, or Claude login state.
+- Syncing claude.ai chats or Cowork sessions (already stored in the cloud).
+- Windows and macOS builds (v1 code must stay portable; section 11).
+- Being an official Anthropic product.
 
-## ۴. چه چیزهایی منتقل می‌شود
+## 4. What syncs
 
-| مورد | محل روی لینوکس | پیش‌فرض | توضیح |
-| ---- | --------------- | ------- | ----- |
-| دستورالعمل‌های کلی | `~/.claude/CLAUDE.md` | روشن | |
-| مهارت‌ها | `~/.claude/skills/<name>/` | روشن | به‌جز `skills/synced/` (اپلیکیشن خودش آن‌ها را همگام می‌کند) |
-| حافظه‌ی پروژه | `~/.claude/projects/<dashed path>/memory/` | روشن | برای هر پروژه جدا؛ بخش ۵ |
-| متن گفتگوها | `~/.claude/projects/<dashed path>/<id>.jsonl` | روشن | N روز اخیر؛ قابل تنظیم، پیش‌فرض ۷ |
-| فهرست گفتگوهای اپلیکیشن | `~/.config/Claude/claude-code-sessions/<account>/<org>/local_<id>.json` | روشن | مسیرها برای هر سیستم بازنویسی می‌شوند؛ اپلیکیشن فقط موقع باز شدن می‌خواندش |
-| کار نیمه‌تمام پروژه | repoی git خود پروژه | خاموش | برای برنامه‌نویس‌ها؛ شاخه، commitهای push‌نشده، staged، unstaged و فایل‌های untracked (غیر ignored) |
-| پوشه‌های شخصی | هر پوشه‌ای که کاربر انتخاب کند | خاموش | مثلاً یادداشت‌هایی که بیرون از پروژه نگه داشته می‌شوند |
-| `settings.json` | `~/.claude/settings.json` | هرگز | مخصوص هر سیستم است؛ ابزار فقط hookهای خودش را به آن اضافه می‌کند |
-| دستورالعمل‌های مخصوص یک سیستم | `~/.claude/CLAUDE.machine.md` | هرگز | بخش ۴-۱ |
+| Item | Location on Linux | Default | Notes |
+| ---- | ----------------- | ------- | ----- |
+| Global instructions | `~/.claude/CLAUDE.md` | on | |
+| Skills | `~/.claude/skills/<name>/` | on | Skip `skills/synced/` (the app syncs those itself) |
+| Project memory | `~/.claude/projects/<dashed path>/memory/` | on | Per project; section 5 |
+| Session transcripts | `~/.claude/projects/<dashed path>/<id>.jsonl` | on | Last N days; configurable, default 7 |
+| Desktop app session list | `~/.config/Claude/claude-code-sessions/<account>/<org>/local_<id>.json` | on | Paths rewritten per machine; the app reads the list only at start |
+| Unfinished project work | the project's git repository | off | Developers; branch, unpushed commits, staged, unstaged, untracked (not ignored) files |
+| Personal folders | any folder the user picks | off | e.g. notes kept outside the project |
+| `settings.json` | `~/.claude/settings.json` | never | Machine-specific; Karvan only adds its hooks |
+| Machine-only instructions | `~/.claude/CLAUDE.machine.md` | never | Section 4.1 |
 
-### ۴-۱. تنظیمات مخصوص هر سیستم
+### 4.1 Per-machine settings
 
-پیش‌فرض: همه‌چیز بین سیستم‌ها مشترک است. برای تفاوت‌ها دو راه ساده هست، بدون ادغام یا منطق پیچیده:
+By default everything is shared between machines. Two simple ways to differ, with no merge logic:
 
-- **دستورالعمل مخصوص یک سیستم:** `karvan init` در انتهای `CLAUDE.md` مشترک یک خط import می‌گذارد
-  (`@~/.claude/CLAUDE.machine.md`) و این فایل را روی هر سیستم می‌سازد. Claude Code خودش آن را می‌خواند، اما
-  Karvan هرگز منتقلش نمی‌کند. مثلاً سر کار: «به سرور staging دسترسی داری»؛ در خانه: «VPN خاموش است».
-- **حذف برای یک سیستم:** هر سیستم می‌تواند بگوید یک مهارت یا یک پروژه را نمی‌خواهد
-  (`karvan exclude skill <name>`). آن مورد روی بقیه‌ی سیستم‌ها دست‌نخورده می‌ماند.
+- **Machine-only instructions:** `karvan init` adds one import line at the end of the shared `CLAUDE.md`
+  (`@~/.claude/CLAUDE.machine.md`) and creates that file on each machine. Claude Code reads it; Karvan
+  never syncs it. For example, at work: "you can reach the staging server"; at home: "the VPN is off".
+- **Exclude on one machine:** a machine can opt out of a skill or a project
+  (`karvan exclude skill <name>`). Other machines are not affected.
 
-## ۵. پروژه‌ها روی سیستم‌های مختلف
+## 5. Projects across machines
 
-یک پروژه روی سیستم‌های مختلف در مسیرهای مختلف است (`~/work/app` سر کار، `~/temp/app` در خانه). Claude Code
-پوشه‌ی هر پروژه را از روی مسیر کامل آن نام‌گذاری می‌کند و اپلیکیشن دسکتاپ هم مسیر کامل را در فایل هر گفتگو
-ذخیره می‌کند.
+The same project sits at different paths on different machines (`~/work/app` at work, `~/temp/app`
+at home). Claude Code names a project's folder after its absolute path, and the desktop app stores
+absolute paths in its session entries.
 
-- هر پروژه با آدرس remote ی git آن (به شکل یکسان‌شده) شناخته می‌شود، یا اگر remote ندارد، با اسمی که کاربر
-  می‌دهد.
-- هر سیستم نقشه‌ی خودش را دارد: شناسه‌ی پروژه ← مسیر محلی.
-- در داده‌ی ذخیره‌شده، به‌جای مسیر پروژه یک نشانگر (placeholder) می‌آید؛ هر سیستم موقع بارگذاری، مسیر خودش را
-  جایگزین می‌کند. فقط ابتدای کامل مسیر جایگزین می‌شود (`/a/app` با `/a/app/x` جور است، با `/a/app-old` نه).
-- پروژه‌ای که روی یک سیستم تعریف نشده، منتقل می‌شود ولی آن‌جا بارگذاری نمی‌شود؛ `status` آن را نشان می‌دهد.
+- A project is identified by its normalized git remote URL, or by a name the user gives when there is
+  no remote.
+- Each machine keeps its own map: project id → local path.
+- Stored data uses a placeholder for the project path; each machine writes its own path back when it
+  loads. Only whole path prefixes are rewritten (`/a/app` matches `/a/app/x`, not `/a/app-old`).
+- A project not mapped on a machine is carried but not loaded there; `status` lists it.
 
-## ۶. رفتار همگام‌سازی
+## 6. Sync behavior
 
-### چه زمانی
+### When
 
-- hook ی `SessionStart` در Claude Code: گرفتن و بارگذاری.
-- hook ی `SessionEnd`: ذخیره و ارسال.
-- زمان‌بند، هر ۱۰ دقیقه (قابل تنظیم) تا وقتی سیستم روشن است؛ گفتگوهایی که در ۱۵ دقیقه‌ی اخیر نوشته شده‌اند
-  (احتمالاً هنوز بازند) را رد می‌کند.
-- موقع خروج از حساب و خاموش شدن: ذخیره‌ی همه‌چیز و ارسال.
-- دستی: `karvan sync`.
+- Claude Code `SessionStart` hook: pull and load.
+- Claude Code `SessionEnd` hook: save and push.
+- A timer, every 10 minutes (configurable), while the machine is on; it skips transcripts written in
+  the last 15 minutes (probably still open).
+- At logout and shutdown: save everything and push.
+- By hand: `karvan sync`.
 
-اجراها با قفل پشت سر هم انجام می‌شوند. خروجی `SessionStart` به Claude نشان داده می‌شود، پس اجرای عادی هیچ
-چیزی چاپ نمی‌کند؛ اجرایی که به کاربر نیاز دارد، یک خط ساده چاپ می‌کند.
+Runs are serialized with a lock. Output on `SessionStart` is shown to Claude, so a normal run prints
+nothing; a run that needs the user prints one plain line.
 
-### قانون‌های حل تداخل
+### Conflict rules
 
-درس هفته‌ی آزمایشی: گفتگویی که روی هر دو سیستم ادامه پیدا کرد، فایلش را در هر دو طرف عوض کرد و همه‌ی
-همگام‌سازی‌های بعدی تا حل دستی متوقف شدند.
+From the trial: a session continued on both machines changed its transcript on both sides, and every
+later sync stopped until it was fixed by hand.
 
-| داده | قانون |
+| Data | Rule |
 | ---- | ---- |
-| متن گفتگو | فقط اضافه‌شونده است: اگر یک نسخه ابتدای نسخه‌ی دیگر باشد، بلندتر نگه داشته می‌شود. اگر از هم جدا شده باشند (روی هر دو سیستم ادامه پیدا کرده)، هر دو نگه داشته می‌شوند: دومی یک گفتگوی جدید با عنوان «… (از <سیستم>)» می‌شود. هیچ خطی دور ریخته نمی‌شود. |
-| فایل گفتگو در اپلیکیشن | `lastActivityAt` جدیدتر برنده است. |
-| وضعیت خود هر سیستم (عکس فوری کار نیمه‌تمام، فهرست ردشده‌ها) | هر سیستم مالک مال خودش است؛ هرگز ادغام نمی‌شود. |
-| متن (`CLAUDE.md`، حافظه، مهارت‌ها، پوشه‌های شخصی) | ادغام سه‌طرفه. در تداخل واقعی هر دو نسخه کنار هم نگه داشته می‌شوند، به کاربر خبر داده می‌شود، و فایل‌های دیگر متوقف نمی‌شوند. |
-| حذف در برابر تغییر | تغییر برنده است. |
+| Transcript | Append-only: if one copy is a prefix of the other, keep the longer. If they diverged (continued on both machines), keep both: the second becomes a new session titled "… (from <machine>)". Never drop lines. |
+| Desktop session entry | The newer `lastActivityAt` wins. |
+| A machine's own state (unfinished-work snapshot, held-back list) | Each machine owns its own; never merged. |
+| Text (`CLAUDE.md`, memory, skills, personal folders) | Three-way merge. On a real conflict keep both versions side by side, notify, and keep syncing everything else. |
+| Deletion vs. change | The change wins. |
 
-### کار نیمه‌تمام پروژه (اختیاری)
+### Unfinished project work (optional)
 
-برگرفته از `wip.sh` هفته‌ی آزمایشی:
+From the prototype's `wip.sh`:
 
-- ذخیره: شاخه، HEAD، یک bundle از commitهایی که هیچ remote ی ندارد، diff های staged و unstaged، و فایل‌های
-  untracked که git نادیده نمی‌گیرد (حداکثر ۲۰ مگابایت). درخت بدون تغییر چیزی اضافه نمی‌کند. merge یا rebase
-  در جریان قابل انتقال نیست؛ این را بگوید.
-- وضعیت هنگام شروع: «کار نیمه‌تمام از <سیستم> (<زمان>، شاخه‌ی <b>) منتظر است» — فقط وقتی واقعاً چیزی نیمه‌تمام
-  باشد.
-- بازگردانی (فقط با موافقت کاربر): شاخه را بگیرد (اگر HEAD هنوز نبود، همه‌چیز را بگیرد — شاخه‌ی تازه‌ای که هنوز
-  commit خودش را ندارد، با اسم خودش روی remote نیست)، به آن برود، fast-forward کند و تغییرات را دوباره اعمال
-  کند. به‌جای بازنویسی تغییرات محلی‌ای که هیچ عکس فوری‌ای ندارند، امتناع کند. وقتی منتظر شبکه است، بگوید
-  دارد چه می‌کند.
-- هرگز در پروژه‌ی کاربر commit، push، stash یا reset نکند.
+- Save: branch, HEAD, a bundle of commits no remote has, staged and unstaged diffs, untracked files git
+  does not ignore (limit 20 MB). An unchanged tree adds nothing. A merge or rebase in progress cannot
+  travel; say so.
+- Status on start: "unfinished work from <machine> (<time>, branch <b>) is waiting", only when
+  something is actually unfinished.
+- Restore (only when the user agrees): fetch the branch (fetch everything if HEAD is still missing: a
+  new branch with no commits of its own is not on the remote under its name), switch, fast-forward,
+  reapply the changes. Refuse rather than overwrite local changes no snapshot holds. Say what it is
+  doing while it waits on the network.
+- Never commit, push, stash or reset the user's project.
 
-## ۷. محل ذخیره (Transport)
+## 7. Transport
 
-جایی که سیستم‌ها به هم می‌رسند.
+The store is where machines meet.
 
-| گزینه | برای | نسخه‌ی ۱ |
+| Option | For | v1 |
 | ---- | ---- | ---- |
-| repoی خصوصی git (GitHub، GitLab، هر remote ی SSH/HTTPS) | برنامه‌نویس‌ها | بله |
-| پوشه‌ای که با یک فضای ابری همگام می‌شود (Google Drive، Dropbox، OneDrive، Syncthing) | همه | قبل از انتشار ویندوز |
+| A private git repository (GitHub, GitLab, any SSH/HTTPS remote) | Developers | yes |
+| A folder synced by a cloud drive (Google Drive, Dropbox, OneDrive, Syncthing) | Everyone | before the Windows release |
 
-الزامات روش git، از هفته‌ی آزمایشی:
+Requirements for the git transport, from the trial:
 
-- **کاربر نباید چیزی نصب کند:** git داخل خود برنامه است (کتابخانه‌ی gitoxide)؛ فرمان `git` لازم نیست. تنها
-  استثنا بخش اختیاری کار نیمه‌تمام پروژه است که روی repoی خود کاربر کار می‌کند؛ کسی که آن را روشن می‌کند، git
-  را از قبل دارد.
+- **Nothing to install:** git is built in (the gitoxide library); the `git` command is not needed. The
+  one exception is the optional unfinished-work feature, which works on the user's own repository;
+  whoever turns it on already has git.
+- Never force-push. Fetch, merge by the rules above, push; on failure keep local data and retry.
+- A timeout on every network call, with a clear message ("push failed, will retry").
+- Some networks stall SSH on port 22 while login and fetch still work. Detect a stalled push and offer
+  GitHub's SSH over port 443 (`ssh.github.com:443`). Optional, never the default.
+- Refuse a public repository (checked through the host's API where possible) unless the user overrides.
 
-- هرگز force push نکند. بگیرد، با قانون‌های بالا ادغام کند، بفرستد؛ اگر نشد، داده‌ی محلی را نگه دارد و دوباره
-  امتحان کند.
-- برای هر ارتباط شبکه‌ای مهلت زمانی داشته باشد و پیام واضح بدهد («ارسال نشد، دوباره امتحان می‌شود»).
-- بعضی شبکه‌ها SSH روی پورت ۲۲ را کند یا متوقف می‌کنند، در حالی که ورود و گرفتن داده کار می‌کند. ارسال گیرکرده
-  را تشخیص دهد و SSH ی GitHub روی پورت ۴۴۳ (`ssh.github.com:443`) را پیشنهاد کند. اختیاری، هرگز پیش‌فرض.
-- repoی عمومی را رد کند (در صورت امکان از راه API میزبان بررسی کند)، مگر اینکه کاربر صریحاً بخواهد.
+## 8. Security and privacy
 
-## ۸. امنیت و حریم خصوصی
+Transcripts hold code, file contents, command output and sometimes secrets.
 
-متن گفتگوها شامل کد، محتوای فایل‌ها، خروجی دستورها و گاهی رمز و توکن است.
+- **Encryption on by default.** Every file is encrypted (age) before it reaches the store. Keys:
+  - The first `karvan init` creates a random **master key** (an age X25519 identity). All data is
+    encrypted to it.
+  - The master key is locked with the user's **passphrase** (scrypt), and the locked copy lives in the
+    store itself. A second machine asks only for the passphrase; no file is moved by hand.
+  - On each machine the unlocked key is kept in the OS keyring; the passphrase is needed once per machine.
+  - **Recovery code:** `init` shows a recovery code (the master key in printable form) once, to keep
+    somewhere safe. Losing both the passphrase and this code means the data cannot be recovered; Karvan
+    says so plainly.
+  - Changing the passphrase re-locks only the master key, not the data.
+  - Advanced users may use a key file instead of a passphrase.
+- **Secret scanning before upload,** with built-in gitleaks-style rules. A file with a finding stays on
+  the machine and is listed in `status` with the rule that matched.
+- **Allow rules** the user can turn on, e.g. database URLs on `localhost` (in the trial, 16 of 20
+  sessions were held back only for a local development database URL).
+- Never read or send `.env`, credentials, `~/.claude/.credentials.json`, `~/.claude.json`.
+- Encrypted data still shows file sizes and times to the store; the docs say so.
 
-- **رمزنگاری به‌صورت پیش‌فرض روشن.** هر فایل قبل از رسیدن به محل ذخیره رمزنگاری می‌شود (با age). طرح کلید:
-  - اولین `karvan init` یک **کلید اصلی** تصادفی (X25519 ی age) می‌سازد. همه‌ی داده‌ها با همین کلید رمز می‌شوند.
-  - کلید اصلی با **عبارت عبور** کاربر (scrypt) قفل می‌شود و نسخه‌ی قفل‌شده‌اش در خود محل ذخیره می‌ماند. سیستم
-    دوم فقط عبارت عبور را می‌پرسد؛ هیچ فایلی دستی جابه‌جا نمی‌شود.
-  - روی هر سیستم، کلید باز‌شده در keyring سیستم‌عامل نگه داشته می‌شود؛ عبارت عبور فقط یک بار روی هر سیستم لازم است.
-  - **کد بازیابی:** موقع init یک کد بازیابی (خود کلید اصلی، به شکل قابل چاپ) یک بار نشان داده می‌شود تا کاربر
-    جایی امن نگهش دارد. فراموش کردن عبارت عبور + گم کردن این کد = داده‌ها برنمی‌گردند؛ این صریحاً گفته می‌شود.
-  - عوض کردن عبارت عبور فقط قفل کلید اصلی را عوض می‌کند، نه کل داده‌ها را.
-  - برای کاربران حرفه‌ای: به‌جای عبارت عبور، یک فایل کلید (اختیاری).
-- **جست‌وجوی رمز و توکن قبل از ارسال،** با قانون‌های داخلی شبیه gitleaks. فایلی که چیزی در آن پیدا شود، روی
-  سیستم می‌ماند و در `status` با قانونی که پیدایش کرده نمایش داده می‌شود.
-- **قانون‌های مجاز** که کاربر می‌تواند روشن کند، مثل آدرس دیتابیس روی `localhost` (در هفته‌ی آزمایشی ۱۶ گفتگو
-  از ۲۰ تا فقط به خاطر آدرس دیتابیس محلی توسعه جا ماندند).
-- هرگز `.env`، اطلاعات ورود، `~/.claude/.credentials.json` و `~/.claude.json` را نخواند و نفرستد.
-- داده‌ی رمزنگاری‌شده هنوز حجم و زمان فایل‌ها را به محل ذخیره نشان می‌دهد؛ این در مستندات گفته شود.
+## 9. User experience
 
-## ۹. تجربه‌ی کاربری
+### v1 (Linux): command line
 
-### نسخه‌ی ۱ (لینوکس): خط فرمان
-
-| فرمان | کار |
+| Command | Does |
 | ---- | ---- |
-| `karvan init` | اجرای اول: انتخاب محل ذخیره، تنظیم رمزنگاری، تعریف پروژه‌ها، نصب hookها و زمان‌بند |
-| `karvan status` | آخرین همگام‌سازی، چیزهای منتظر، چیزهای جامانده و دلیلشان، مشکلات |
-| `karvan sync` | همگام‌سازی همین الان |
-| `karvan restore [machine]` | بازگردانی کار نیمه‌تمام |
-| `karvan doctor` | بررسی درست بودن JSON ی settings.json، hookها، زمان‌بند، دسترسی به محل ذخیره، شبکه (پورت ۲۲/۴۴۳) و نسخه‌ی ساختار اپلیکیشن |
-| `karvan uninstall` | حذف hookها و زمان‌بند، برگرداندن تنظیمات، نگه داشتن محل ذخیره |
+| `karvan init` | First run: choose the store, set up encryption, map projects, install hooks and the timer |
+| `karvan status` | Last sync, what is waiting, what was held back and why, problems |
+| `karvan sync` | Sync now |
+| `karvan restore [machine]` | Restore unfinished work |
+| `karvan doctor` | Check `settings.json` is valid JSON, hooks, timer, store access, network (port 22/443), app format version |
+| `karvan uninstall` | Remove hooks and timer, restore settings, keep the store |
 
-- پیام‌ها به زبان ساده؛ در ابتدا انگلیسی و فارسی.
-- وقتی گفتگوی جدیدی برای اپلیکیشن رسید: «گفتگوهای جدید از <سیستم>: اپلیکیشن Claude را با Ctrl+Q ببندید و دوباره
-  باز کنید» (بستن پنجره کافی نیست؛ اپلیکیشن فهرست را فقط موقع باز شدن می‌خواند).
+- Messages in plain language; English first, Persian next.
+- When desktop sessions arrived: "new sessions from <machine>: quit the Claude app with Ctrl+Q and open
+  it again to see them" (closing the window is not enough; the app reads its list only at start).
 
-### بعداً: آیکون کنار ساعت
+### Later: tray app
 
-آیکون وضعیت، «همگام‌سازی همین الان»، «بازگردانی»، تنظیمات. با Tauri و همان هسته‌ی Rust.
+Status icon, Sync now, Restore, settings. Tauri, sharing the Rust core.
 
-## ۱۰. نصب (نسخه‌ی ۱ لینوکس)
+## 10. Install (Linux v1)
 
-- بسته‌ی `.deb` و یک فایل فشرده‌ی مستقل (AppImage اختیاری)؛ یک فایل اجرایی، بدون نیاز به نصب چیز دیگر.
-- `init` فایل `~/.claude/settings.json` را با احتیاط ویرایش می‌کند: JSON ی نامعتبر را با پیام واضح رد می‌کند،
-  نسخه‌ی پشتیبان می‌گیرد و hookهای خودش را فقط یک بار اضافه می‌کند.
-- واحدهای کاربری systemd برای زمان‌بند و اجرای موقع خاموش شدن.
+- A `.deb` and a static tarball (AppImage optional); one binary, nothing else to install.
+- `init` edits `~/.claude/settings.json` safely: refuses invalid JSON with a clear message, backs it up,
+  adds its hooks once.
+- systemd user units for the timer and the shutdown run.
 
-## ۱۱. سیستم‌عامل‌ها
+## 11. Platforms
 
-| | لینوکس (نسخه‌ی ۱) | ویندوز (بعدی) | مک (بعدتر) |
+| | Linux (v1) | Windows (next) | macOS (later) |
 | -- | -- | -- | -- |
-| داده‌ی اپلیکیشن دسکتاپ | `~/.config/Claude` | `%APPDATA%\Claude` | `~/Library/Application Support/Claude` |
-| زمان‌بند و اجرای موقع خاموشی | واحدهای کاربری systemd | Task Scheduler | launchd |
-| محل ذخیره‌ی پیش‌فرض | git | پوشه‌ی فضای ابری | پوشه‌ی فضای ابری |
+| Desktop app data | `~/.config/Claude` | `%APPDATA%\Claude` | `~/Library/Application Support/Claude` |
+| Timer and shutdown run | systemd user units | Task Scheduler | launchd |
+| Default store | git | cloud-drive folder | cloud-drive folder |
 
-کد نسخه‌ی ۱ جزئیات هر سیستم‌عامل را پشت یک ماژول نگه می‌دارد؛ هیچ فراخوانی‌ای به `date`، `sed`، `tac` یا
-`flock` (ابزارهای مخصوص GNU در هفته‌ی آزمایشی) ندارد.
+v1 code keeps platform specifics behind one module and never shells out to `date`, `sed`, `tac` or
+`flock` (the prototype's GNU-only tools).
 
-## ۱۲. ساختارهای مستندنشده
+## 12. Undocumented formats
 
-فایل گفتگوها در اپلیکیشن و ساختار متن گفتگوها، ساختارهای داخلی هستند.
+The desktop app's session entries and the transcripts' layout are internal formats.
 
-- نسخه‌ی ساختار را تشخیص دهد؛ اگر ناشناخته بود، همگام‌سازی همان بخش را متوقف کند، بقیه را ادامه دهد و به کاربر
-  بگوید.
-- فقط فیلدهایی را بنویسد که وجودشان معلوم است؛ بقیه را بدون تغییر منتقل کند.
-- تست‌های یکپارچگی روی فایل‌های واقعی از نسخه‌های فعلی اپلیکیشن اجرا شوند.
+- Detect the format version; if it is unknown, stop syncing that part, keep the rest working, and say so.
+- Write only fields known to exist; copy the rest through unchanged.
+- Integration tests run against real files from current app versions.
 
-## ۱۳. معیارهای موفقیت
+## 13. Success measures
 
-- هیچ داده‌ای در سناریوهای هفته‌ی آزمایشی (بخش ۱۵) و یک دوره‌ی آزمایشی دوهفته‌ای از دست نرود.
-- گفتگویی که روی یک سیستم ادامه پیدا کرده، حداکثر ۱۵ دقیقه بعد از آنلاین شدن هر دو سیستم روی سیستم دیگر قابل
-  ادامه باشد.
-- در استفاده‌ی عادی هیچ ادغام دستی‌ای لازم نباشد.
-- از نصب تا اولین همگام‌سازی برای یک برنامه‌نویس کمتر از ۵ دقیقه طول بکشد.
+- No data lost across the trial scenarios (section 15) and a two-week beta.
+- A session continued on one machine can be resumed on the other within 15 minutes of both being online.
+- No manual merges in normal use.
+- Install to first sync in under 5 minutes for a developer.
 
-## ۱۴. مراحل
+## 14. Milestones
 
-1. **M0 – هم‌ارزی:** خط فرمان Rust با همان رفتار هفته‌ی آزمایشی (محل ذخیره‌ی git، یک پروژه، بدون رمزنگاری)،
-   تست‌شده روی همان دو سیستم.
-2. **M1 – امن:** رمزنگاری، جست‌وجوی رمز و توکن، قانون‌های مجاز، چند پروژه، قانون گفتگوهای جداشده.
-3. **M2 – انتشار عمومی لینوکس:** بسته‌بندی، `doctor`، `uninstall`، مستندات، مجوز انتشار.
-4. **M3:** محل ذخیره‌ی پوشه‌ی ابری، آیکون کنار ساعت.
-5. **M4:** ویندوز. **M5:** مک.
+1. **M0 – parity:** a Rust CLI with the prototype's behavior (git store, one project, no encryption),
+   tested on the two trial machines. Built phase by phase (section 14.1).
+2. **M1 – safe:** encryption, secret scanning, allow rules, multiple projects, the divergent-transcript rule.
+3. **M2 – Linux public release:** packaging, `doctor`, `uninstall`, docs.
+4. **M3:** cloud-drive folder store, tray app.
+5. **M4:** Windows. **M5:** macOS.
 
-## ۱۵. سناریوهای تست (از هفته‌ی آزمایشی)
+### 14.1 M0 phases
 
-1. یک گفتگو روی هر دو سیستم ادامه پیدا کرده ← هر دو نگه داشته می‌شوند، چیزی متوقف نمی‌شود.
-2. شاخه‌ی تازه بدون commit خودش ← بازگردانی هر چه لازم دارد را می‌گیرد.
-3. ارسال روی پورت ۲۲ گیر می‌کند ← تشخیص داده می‌شود و ۴۴۳ پیشنهاد می‌شود.
-4. `settings.json` با کامای اضافه ← خطای واضح، هیچ چیزی نوشته نمی‌شود.
-5. فایل گفتگوها وقتی اپلیکیشن باز است می‌رسند ← بعد از Ctrl+Q و باز کردن دوباره نمایش داده می‌شوند.
-6. رمز یا توکن در متن گفتگو ← نگه داشته می‌شود، فهرست می‌شود، هرگز ارسال نمی‌شود.
-7. یک سیستم یک روز خاموش است، بعد هر دو آنلاین می‌شوند ← بدون کار دستی به یک وضعیت می‌رسند.
-8. merge یا rebase در جریان در پروژه ← ذخیره نمی‌شود و دلیلش گفته می‌شود.
+Each phase ends with passing tests, a commit and a push, then stops for review before the next one.
 
-## ۱۶. سؤال‌های باز
+1. **Skeleton:** Cargo project, CLI (`init`, `sync`, `status`, `restore`, `doctor` stubs), config file,
+   paths module (Claude dirs, dashed project folder name), CI running `cargo test` and `cargo clippy`.
+2. **Hooks:** `init` adds `SessionStart`/`SessionEnd` hooks to `settings.json` safely; `doctor` checks them.
+3. **Store:** git store via gitoxide: clone, fetch, commit, merge with per-path conflict rules, push,
+   timeouts, lock; never force.
+4. **Shared files:** `CLAUDE.md`, skills (not `synced/`), project memory.
+5. **Transcripts:** save and load with the history window, active-session skip, secret hold-back.
+6. **Desktop entries:** save and load with the path placeholder and the newer-wins rule.
+7. **Unfinished work:** save, status, restore.
+8. **Timer and end-to-end:** systemd user units; an end-to-end test with two temporary home folders and
+   a local bare repository.
 
-1. ~~اسم~~: Karvan (قطعی، ۱۴۰۵/۰۸/۲۵).
-2. ~~مجوز انتشار~~: دوگانه‌ی MIT یا Apache-2.0 (قطعی).
-3. ~~کلید رمزنگاری~~: کلید اصلی تصادفی، قفل‌شده با عبارت عبور، به‌اضافه‌ی کد بازیابی؛ فایل کلید اختیاری (بخش ۸).
-4. ~~بازه‌ی تاریخچه~~: قابل تنظیم، پیش‌فرض ۷ روز.
-5. ~~روش git~~: کتابخانه‌ی داخلی gitoxide؛ کاربر چیزی نصب نمی‌کند (بخش ۷).
-6. ~~تنظیمات هر سیستم~~: پیش‌فرض همه مشترک؛ فایل `CLAUDE.machine.md` مخصوص هر سیستم و حذف برای یک سیستم
-   (بخش ۴-۱).
+## 15. Test scenarios (from the trial)
 
-همه‌ی سؤال‌های باز پیش‌نویس ۱ بسته شدند (۱۴۰۵/۰۸/۲۵).
+1. The same session continued on both machines → both kept, nothing stops.
+2. A new branch with no commits of its own → restore fetches what it needs.
+3. A push stalls on port 22 → detected, 443 offered.
+4. `settings.json` with a trailing comma → clear error, nothing written.
+5. Desktop entries arrive while the app is open → shown after Ctrl+Q and reopening.
+6. A secret in a transcript → held back, listed, never uploaded.
+7. One machine off for a day, then both online → they converge with no manual step.
+8. A merge or rebase in progress in the project → not saved, explained.
+
+## 16. Decisions
+
+1. Name: Karvan.
+2. License: MIT or Apache-2.0.
+3. Encryption keys: a random master key locked with a passphrase, plus a recovery code; key file optional (section 8).
+4. History window: configurable, default 7 days.
+5. Git: built in (gitoxide); users install nothing (section 7).
+6. Per-machine settings: shared by default; a machine-only `CLAUDE.machine.md` and per-machine excludes (section 4.1).
+7. Docs, code and the development conversation are in English.
