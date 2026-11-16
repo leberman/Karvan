@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leberman/karvan/internal/config"
+	"github.com/leberman/karvan/internal/hooks"
 )
 
 func newStatusCmd(app *App) *cobra.Command {
@@ -114,6 +115,8 @@ func (d *doctor) run(app *App) {
 		d.ok("Claude desktop app data: %s", env.DesktopDataDir())
 	}
 
+	d.checkHooks(app)
+
 	if cfg == nil {
 		return
 	}
@@ -128,6 +131,23 @@ func (d *doctor) run(app *App) {
 			continue
 		}
 		d.ok("project %s: %s", p.ID, p.Path)
+	}
+}
+
+func (d *doctor) checkHooks(app *App) {
+	path := app.Env.ClaudeSettings()
+	st, err := hooks.Check(path)
+	switch {
+	case errors.Is(err, hooks.ErrInvalidJSON):
+		d.fail("Claude Code settings %s: %v (fix it by hand; Karvan will not change an invalid file)", path, err)
+	case err != nil:
+		d.fail("Claude Code settings %s: %v", path, err)
+	case st.Installed(app.Executable()):
+		d.ok("hooks: SessionStart and SessionEnd run %s", app.Executable())
+	case st.Present["SessionStart"] || st.Present["SessionEnd"]:
+		d.warn("hooks: present but out of date or incomplete; run `karvan init` again")
+	default:
+		d.warn("hooks: not installed; run `karvan init`")
 	}
 }
 

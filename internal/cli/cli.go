@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leberman/karvan/internal/config"
+	"github.com/leberman/karvan/internal/hooks"
 	"github.com/leberman/karvan/internal/paths"
 )
 
@@ -42,7 +45,26 @@ type App struct {
 	Stderr io.Writer
 	Build  Build
 
+	// Exe is the absolute path hooks and timers should run; empty means
+	// os.Executable().
+	Exe string
+
 	configPath string // --config; empty = Env.ConfigFile()
+}
+
+// Executable is the karvan binary that hooks and timers run.
+func (a *App) Executable() string {
+	if a.Exe != "" {
+		return a.Exe
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "karvan"
+	}
+	if r, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = r
+	}
+	return exe
 }
 
 // ConfigPath is the config file this run uses.
@@ -106,6 +128,7 @@ Unofficial tool, not made or endorsed by Anthropic.`,
 		newStatusCmd(app),
 		newRestoreCmd(app),
 		newDoctorCmd(app),
+		newUninstallCmd(app),
 		newVersionCmd(app),
 	)
 	// Unknown subcommands and wrong argument counts are usage errors.
@@ -144,11 +167,46 @@ func newInitCmd(_ *App) *cobra.Command {
 }
 
 func newSyncCmd(_ *App) *cobra.Command {
-	return &cobra.Command{
+	var hook string
+	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Sync now",
 		Args:  cobra.NoArgs,
-		RunE:  func(*cobra.Command, []string) error { return notImplemented("sync", 3) },
+		RunE: func(*cobra.Command, []string) error {
+			switch hook {
+			case "", "session-start", "session-end":
+			default:
+				return usageError{fmt.Errorf("--hook %q: must be session-start or session-end", hook)}
+			}
+			return notImplemented("sync", 3)
+		},
+	}
+	cmd.Flags().StringVar(&hook, "hook", "", "called from a Claude Code hook (session-start or session-end)")
+	_ = cmd.Flags().MarkHidden("hook")
+	return cmd
+}
+
+func newUninstallCmd(app *App) *cobra.Command {
+	return &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove Karvan's hooks and timer from this machine (the store is kept)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			changed, backup, err := hooks.Remove(app.Env.ClaudeSettings())
+			if err != nil {
+				return err
+			}
+			w := cmd.OutOrStdout()
+			if changed {
+				fmt.Fprintf(w, "Removed Karvan's hooks from %s.\n", app.Env.ClaudeSettings())
+				if backup != "" {
+					fmt.Fprintf(w, "The previous file is kept as %s.\n", backup)
+				}
+			} else {
+				fmt.Fprintln(w, "No Karvan hooks to remove.")
+			}
+			return nil
+		},
 	}
 }
 

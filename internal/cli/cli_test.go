@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/leberman/karvan/internal/config"
+	"github.com/leberman/karvan/internal/hooks"
 	"github.com/leberman/karvan/internal/paths"
 )
 
@@ -195,5 +196,40 @@ func TestBuildStringDev(t *testing.T) {
 	s := Build{}.String()
 	if !strings.HasPrefix(s, "karvan ") || !strings.Contains(s, "/") {
 		t.Errorf("%q", s)
+	}
+}
+
+func TestDoctorHooksAndUninstall(t *testing.T) {
+	app, out, _ := newApp(t)
+	app.Exe = "/usr/bin/karvan"
+	mkdir(t, app.Env.ClaudeProjectsDir())
+	if code := Run(app, []string{"doctor"}); code != ExitOK || !strings.Contains(out.String(), "warn  hooks: not installed") {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	if _, _, err := hooks.Install(app.Env.ClaudeSettings(), app.Exe); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	Run(app, []string{"doctor"})
+	if !strings.Contains(out.String(), "ok    hooks: SessionStart and SessionEnd run /usr/bin/karvan") {
+		t.Fatalf("%s", out)
+	}
+	out.Reset()
+	if code := Run(app, []string{"uninstall"}); code != ExitOK || !strings.Contains(out.String(), "Removed Karvan's hooks") {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	if err := os.WriteFile(app.Env.ClaudeSettings(), []byte("{,}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := Run(app, []string{"doctor"}); code != ExitError || !strings.Contains(out.String(), "will not change an invalid file") {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+}
+
+func TestSyncHookFlag(t *testing.T) {
+	app, _, _ := newApp(t)
+	if code := Run(app, []string{"sync", "--hook", "bogus"}); code != ExitUsage {
+		t.Fatalf("exit %d", code)
 	}
 }

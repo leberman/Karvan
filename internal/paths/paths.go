@@ -62,6 +62,9 @@ func (e Env) ClaudeHome() string {
 	return e.Join(e.Home, ".claude")
 }
 
+// ClaudeSettings is Claude Code's user settings file (hooks live there).
+func (e Env) ClaudeSettings() string { return e.Join(e.ClaudeHome(), "settings.json") }
+
 // ClaudeProjectsDir holds one folder per project (transcripts and memory).
 func (e Env) ClaudeProjectsDir() string { return e.Join(e.ClaudeHome(), "projects") }
 
