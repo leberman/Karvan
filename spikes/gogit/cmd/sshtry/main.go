@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +53,11 @@ func main() {
 	var err error
 	if !strings.HasPrefix(*url, "file://") {
 		auth, how, err = sshAuth(*key)
+		if err == nil {
+			var algos []string
+			algos, err = pinHostKeys(auth, *url)
+			how += fmt.Sprintf(", host key types from known_hosts: %v", algos)
+		}
 	}
 	if err != nil {
 		fail("ssh key: %v", err)
@@ -205,6 +211,45 @@ func sshAuth(keyFile string) (transport.AuthMethod, string, error) {
 	return a, "key file " + keyFile, nil
 }
 
+// pinHostKeys works around a go-git v5.19.3 bug: when the auth method is
+// ssh-agent or a key file, go-git installs a known_hosts callback but never
+// sets HostKeyAlgorithms from known_hosts (that code path only runs when the
+// callback is nil, and it never is). The server may then offer a key type
+// that is not in known_hosts, and the check fails with "knownhosts: key
+// mismatch" although `ssh` itself works. So we open the known_hosts database
+// ourselves and set both the callback and the key types it has for host:port.
+func pinHostKeys(auth transport.AuthMethod, url string) ([]string, error) {
+	ep, err := transport.NewEndpoint(url)
+	if err != nil {
+		return nil, err
+	}
+	port := ep.Port
+	if port == 0 {
+		port = 22
+	}
+	hostPort := net.JoinHostPort(ep.Host, strconv.Itoa(port))
+	db, err := gitssh.NewKnownHostsDb()
+	if err != nil {
+		return nil, err
+	}
+	algos := db.HostKeyAlgorithms(hostPort)
+	if len(algos) == 0 {
+		return nil, fmt.Errorf("no key for %s in ~/.ssh/known_hosts (knownhosts: key is unknown)", hostPort)
+	}
+	var h *gitssh.HostKeyCallbackHelper
+	switch a := auth.(type) {
+	case *gitssh.PublicKeysCallback:
+		h = &a.HostKeyCallbackHelper
+	case *gitssh.PublicKeys:
+		h = &a.HostKeyCallbackHelper
+	default:
+		return nil, fmt.Errorf("unexpected auth type %T", auth)
+	}
+	h.HostKeyCallback = db.HostKeyCallback()
+	h.HostKeyAlgorithms = algos
+	return algos, nil
+}
+
 func isTimeout(err error) bool {
 	var ne net.Error
 	return errors.As(err, &ne) && ne.Timeout()
@@ -230,7 +275,11 @@ func randomID() string {
 func fail(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Fprintln(os.Stderr, "FAIL "+msg)
-	if strings.Contains(msg, "knownhosts") || strings.Contains(msg, "key is unknown") || strings.Contains(msg, "known_hosts") {
+	if strings.Contains(msg, "key mismatch") {
+		fmt.Fprintln(os.Stderr, "     The server's host key differs from the one in ~/.ssh/known_hosts. Check with:")
+		fmt.Fprintln(os.Stderr, "       ssh-keygen -F '[ssh.github.com]:443' -l")
+		fmt.Fprintln(os.Stderr, "     and compare the fingerprints with GitHub's published ones.")
+	} else if strings.Contains(msg, "knownhosts") || strings.Contains(msg, "key is unknown") || strings.Contains(msg, "known_hosts") {
 		fmt.Fprintln(os.Stderr, "     The host key is not in ~/.ssh/known_hosts. Run once:  ssh -T -p 443 git@ssh.github.com")
 		fmt.Fprintln(os.Stderr, "     and accept the key only if its fingerprint matches GitHub's published one.")
 	}
