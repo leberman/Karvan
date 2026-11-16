@@ -456,7 +456,15 @@ func (r *run) decideAll() {
 	for p := range paths {
 		sorted = append(sorted, p)
 	}
-	sort.Strings(sorted)
+	// Desktop entries last: they point at transcripts that must be in place
+	// first (docs/sync-engine.md, open question 1).
+	sort.Slice(sorted, func(i, j int) bool {
+		di, dj := strings.Contains(sorted[i], "/desktop/"), strings.Contains(sorted[j], "/desktop/")
+		if di != dj {
+			return dj
+		}
+		return sorted[i] < sorted[j]
+	})
 	for _, p := range sorted {
 		if err := r.decide(p); err != nil {
 			r.warn("%s: %v", p, err)

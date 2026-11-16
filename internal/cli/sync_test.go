@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -199,5 +200,52 @@ func TestSyncOpenTranscriptWaits(t *testing.T) {
 	run(t, home, "sync")
 	if !strings.Contains(get(hfile), `"uuid":"a1"`) || !strings.Contains(get(hfile), `"uuid":"b1"`) {
 		t.Fatalf("not merged later:\n%s", get(hfile))
+	}
+}
+
+// Desktop app session list: travels with its conversation, gets each
+// machine's own path, and an existing entry waits while the app is open.
+func TestSyncDesktopEntries(t *testing.T) {
+	work, home, workProj, homeProj := twoMachines(t)
+	appOpen := false
+	for _, a := range []*App{work, home} {
+		a.DesktopAppRunning = func() (bool, error) { return appOpen, nil }
+	}
+	entry := func(proj string, at int64) string {
+		return `{"sessionId":"local_1","cliSessionId":"s1","cwd":"` + proj + `","title":"Fix login","lastActivityAt":` + strconv.FormatInt(at, 10) + `}`
+	}
+	wEntry := filepath.Join(work.Env.DesktopSessionsDir(), "acct", "org", "local_1.json")
+	hEntry := filepath.Join(home.Env.DesktopSessionsDir(), "acct", "org", "local_1.json")
+	writeOld(t, filepath.Join(work.Env.ClaudeProjectDir(workProj), "s1.jsonl"), tline("u1", "", workProj, "09:00:00")+"\n")
+	writeOld(t, wEntry, entry(workProj, 1000))
+	// An entry for a folder that is not a configured project stays home.
+	writeOld(t, filepath.Join(work.Env.DesktopSessionsDir(), "acct", "org", "local_2.json"),
+		`{"cliSessionId":"s2","cwd":"/elsewhere","lastActivityAt":5}`)
+	mkdir(t, filepath.Dir(hEntry)) // the app was used with this account at home
+	run(t, work, "sync")
+	run(t, home, "sync")
+	if get(hEntry) != entry(homeProj, 1000) {
+		t.Fatalf("home entry:\n%s", get(hEntry))
+	}
+	if get(filepath.Join(home.Env.DesktopSessionsDir(), "acct", "org", "local_2.json")) != "<missing>" {
+		t.Fatal("an entry outside the projects travelled")
+	}
+
+	// Newer activity at work; the app is open at home: wait and say so.
+	writeOld(t, wEntry, entry(workProj, 2000))
+	run(t, work, "sync")
+	appOpen = true
+	var out bytes.Buffer
+	home.Stdout = &out
+	if code := Run(home, []string{"sync", "--hook", "session-start"}); code != ExitOK {
+		t.Fatal(code)
+	}
+	if get(hEntry) != entry(homeProj, 1000) || !strings.Contains(out.String(), "Ctrl+Q") {
+		t.Fatalf("entry changed while the app was open, or no hint:\n%s", out.String())
+	}
+	appOpen = false
+	run(t, home, "sync")
+	if get(hEntry) != entry(homeProj, 2000) {
+		t.Fatalf("not updated after the app closed:\n%s", get(hEntry))
 	}
 }

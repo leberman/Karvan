@@ -86,6 +86,13 @@ func (a *App) NewEngine(cfg *config.Config) (*engine.Engine, error) {
 		return nil, err
 	}
 	srcs, projects := sources.Build(cfg, a.Env)
+	if a.DesktopAppRunning != nil {
+		for _, s := range srcs {
+			if d, ok := s.(*sources.Desktop); ok {
+				d.AppRunning = a.DesktopAppRunning
+			}
+		}
+	}
 	return &engine.Engine{
 		Store:    st,
 		Sources:  srcs,

@@ -50,6 +50,8 @@ type App struct {
 	Exe string
 	// NoSpawn stops background runs from being started (tests).
 	NoSpawn bool
+	// DesktopAppRunning replaces the process check (tests).
+	DesktopAppRunning func() (bool, error)
 
 	configPath string // --config; empty = Env.ConfigFile()
 }

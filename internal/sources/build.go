@@ -55,7 +55,10 @@ func Build(cfg *config.Config, env paths.Env) ([]engine.Source, map[string]manif
 	if cfg.Items.Transcripts && len(tps) > 0 {
 		out = append(out, &Transcripts{Projects: tps, HistoryDays: cfg.Sync.HistoryDays, SkipRecent: cfg.Sync.SkipRecent.Duration, GOOS: env.GOOS})
 	}
-	_ = tps // desktop entries: phase 7
+	if cfg.Items.Desktop && len(tps) > 0 {
+		out = append(out, &Desktop{Projects: tps, Dir: env.DesktopSessionsDir(), GOOS: env.GOOS,
+			TranscriptsOn: cfg.Items.Transcripts, HistoryDays: cfg.Sync.HistoryDays})
+	}
 	return out, projects
 }
 
