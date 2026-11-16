@@ -5,9 +5,19 @@ the desktop app's session list, memory, skills and, optionally, unfinished proje
 
 > Unofficial tool, not made or endorsed by Anthropic.
 
-**Status:** early development (M0 phase 1: command-line skeleton; the commands do not sync yet).
-See [docs/PRD.md](docs/PRD.md) and [docs/sync-engine.md](docs/sync-engine.md) (in Persian). Written in Go.
-First release: Linux; Windows and macOS later.
+**Status:** M0 (feature parity with the bash prototype) is code-complete and tested end to end; it is being
+tried on real machines. Data is **not encrypted yet** (M1): use a private repository or a private folder.
+
+- Syncs Claude Code conversations (line-level merge: nothing is ever dropped), the desktop app's session
+  list, `CLAUDE.md`, skills, per-project memory, personal folders, and optionally unfinished git work.
+- Projects can live at different paths on each machine; Karvan finds them for you.
+- Store: a private git repository (built-in git, nothing to install; SSH on port 443 supported) or any
+  folder a cloud service syncs.
+- Automatic: Claude Code hooks plus a systemd timer.
+
+Quick start (Linux): `go build -o ~/.local/bin/karvan ./cmd/karvan && karvan init`.
+User guide (Persian): [docs/guide.md](docs/guide.md). Design: [docs/PRD.md](docs/PRD.md),
+[docs/sync-engine.md](docs/sync-engine.md).
 
 ## Building
 

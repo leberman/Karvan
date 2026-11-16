@@ -97,7 +97,7 @@ func (a *App) NewEngine(cfg *config.Config) (*engine.Engine, error) {
 		Store:    st,
 		Sources:  srcs,
 		Machine:  cfg.Machine,
-		Version:  a.Build.Version,
+		Version:  a.Build.short(),
 		StateDir: a.Env.StateDir(),
 		Projects: projects,
 	}, nil

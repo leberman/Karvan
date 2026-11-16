@@ -232,8 +232,11 @@ func (g *Git) Snapshot(ctx context.Context) (Snapshot, error) {
 		c, cancel := g.ctx(ctx)
 		defer cancel()
 		spec := config.RefSpec(fmt.Sprintf("refs/heads/%s:%s", g.Branch, g.trackingRef()))
+		// Full fetch, not shallow: go-git's repeated depth-1 fetches into an
+		// already shallow clone fail with "object not found" after a few
+		// rounds (finding 9, found by the end-to-end test).
 		err = g.repo.FetchContext(c, &git.FetchOptions{RemoteName: gitRemote, RefSpecs: []config.RefSpec{spec},
-			Auth: g.auth, Depth: 1, Tags: git.NoTags, Force: false})
+			Auth: g.auth, Tags: git.NoTags})
 		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return nil, networkError("fetch", g.URL, err)
 		}

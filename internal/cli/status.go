@@ -1,19 +1,23 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leberman/karvan/internal/config"
 	"github.com/leberman/karvan/internal/hooks"
+	"github.com/leberman/karvan/internal/systemd"
 )
 
 func newStatusCmd(app *App) *cobra.Command {
@@ -184,6 +188,8 @@ func (d *doctor) run(app *App) {
 	if cfg == nil {
 		return
 	}
+	d.checkTimer(app, cfg)
+	d.checkStore(app, cfg)
 	for _, p := range cfg.Projects {
 		if err := isDir(p.Path); err != nil {
 			d.fail("project %s: %s: %v", p.ID, p.Path, err)
@@ -213,6 +219,48 @@ func (d *doctor) checkHooks(app *App) {
 	default:
 		d.warn("hooks: not installed; run `karvan init`")
 	}
+}
+
+func (d *doctor) checkTimer(app *App, cfg *config.Config) {
+	if runtime.GOOS != "linux" && app.Systemctl == nil {
+		return
+	}
+	units := systemd.Render(app.Executable(), cfg.Sync.Interval.Duration, app.configPath)
+	if msg := systemd.Check(systemd.Dir(app.configHome()), units, app.systemctl()); msg != "" {
+		d.warn("timer: %s", msg)
+		return
+	}
+	d.ok("timer: every %s, and at logout/shutdown", cfg.Sync.Interval.Duration)
+}
+
+func (d *doctor) checkStore(app *App, cfg *config.Config) {
+	if cfg.Store.Kind == config.StoreGit && strings.Contains(cfg.Store.URL, "github.com") && app.DialCheck != nil {
+		for _, hp := range []string{"github.com:22", "ssh.github.com:443"} {
+			if err := app.DialCheck(hp); err != nil {
+				d.warn("network: cannot reach %s (%v)", hp, err)
+			} else {
+				d.ok("network: %s reachable", hp)
+			}
+		}
+	}
+	eng, err := app.NewEngine(cfg)
+	if err != nil {
+		d.fail("store: %v", err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	snap, err := eng.Store.Snapshot(ctx)
+	if err != nil {
+		d.fail("store %s: %v", eng.Store.Describe(), err)
+		return
+	}
+	if _, err := snap.Get("FORMAT"); err != nil {
+		d.fail("store %s: not set up (run `karvan init`)", eng.Store.Describe())
+		return
+	}
+	names, _ := snap.List("manifests/")
+	d.ok("store: %s (%d machine(s))", eng.Store.Describe(), len(names))
 }
 
 func isDir(p string) error {

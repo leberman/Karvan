@@ -2,14 +2,18 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leberman/karvan/internal/config"
+	"github.com/leberman/karvan/internal/engine"
 	"github.com/leberman/karvan/internal/hooks"
 	"github.com/leberman/karvan/internal/paths"
+	"github.com/leberman/karvan/internal/store"
 )
 
 // newApp returns an App whose home directory is a fresh temp dir, so nothing
@@ -66,18 +70,6 @@ func TestHelpAndVersion(t *testing.T) {
 		}
 		if !strings.HasPrefix(out.String(), "karvan 1.2.3 (commit abcdef0, 2026-11-20) ") {
 			t.Errorf("%v: %q", args, out)
-		}
-	}
-}
-
-func TestStubsExitNotImplemented(t *testing.T) {
-	for _, args := range [][]string{{"init"}} {
-		app, _, errb := newApp(t)
-		if code := Run(app, args); code != ExitNotImplemented {
-			t.Errorf("%v: exit %d, want %d", args, code, ExitNotImplemented)
-		}
-		if !strings.Contains(errb.String(), "not implemented yet") || !strings.Contains(errb.String(), "phase") {
-			t.Errorf("%v: stderr %q", args, errb)
 		}
 	}
 }
@@ -160,7 +152,12 @@ func TestDoctor(t *testing.T) {
 	mkdir(t, used)
 	mkdir(t, unused)
 	mkdir(t, app.Env.ClaudeProjectDir(used))
+	storeDir := t.TempDir()
+	if _, err := engine.InitStore(context.Background(), &store.Folder{Root: storeDir}, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	writeConfig(t, app, func(c *config.Config) {
+		c.Store = config.Store{Kind: config.StoreFolder, Path: storeDir, Branch: "main"}
 		c.Projects = []config.Project{{ID: "github.com/o/app", Path: used}, {ID: "name:other", Path: unused}}
 	})
 	if code := Run(app, []string{"doctor"}); code != ExitOK {
@@ -173,6 +170,7 @@ func TestDoctor(t *testing.T) {
 		"info  Claude desktop app data not found",
 		"ok    project github.com/o/app:",
 		"warn  project name:other: no Claude Code folder",
+		"ok    store: folder",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("doctor missing %q:\n%s", want, out)

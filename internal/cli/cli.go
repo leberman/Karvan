@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leberman/karvan/internal/config"
-	"github.com/leberman/karvan/internal/hooks"
 	"github.com/leberman/karvan/internal/paths"
 )
 
@@ -52,6 +51,13 @@ type App struct {
 	NoSpawn bool
 	// DesktopAppRunning replaces the process check (tests).
 	DesktopAppRunning func() (bool, error)
+	// PublicRepoCheck replaces the GitHub visibility check (tests).
+	PublicRepoCheck func(url string) (public, known bool)
+	// Systemctl replaces `systemctl --user` (tests).
+	Systemctl func(args ...string) ([]byte, error)
+	// DialCheck tests a TCP connection to host:port (doctor's network
+	// check); nil skips it.
+	DialCheck func(hostPort string) error
 
 	configPath string // --config; empty = Env.ConfigFile()
 }
@@ -157,43 +163,6 @@ Unofficial tool, not made or endorsed by Anthropic.`,
 	return root
 }
 
-func notImplemented(what string, phase int) error {
-	return fmt.Errorf("%s: %w (planned for M0 phase %d, see docs/PRD.md section 14-1)", what, ErrNotImplemented, phase)
-}
-
-func newInitCmd(_ *App) *cobra.Command {
-	return &cobra.Command{
-		Use:   "init",
-		Short: "Set up Karvan on this machine: store, encryption, projects, hooks and timer",
-		Args:  cobra.NoArgs,
-		RunE:  func(*cobra.Command, []string) error { return notImplemented("init", 2) },
-	}
-}
-
-func newUninstallCmd(app *App) *cobra.Command {
-	return &cobra.Command{
-		Use:   "uninstall",
-		Short: "Remove Karvan's hooks and timer from this machine (the store is kept)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			changed, backup, err := hooks.Remove(app.Env.ClaudeSettings())
-			if err != nil {
-				return err
-			}
-			w := cmd.OutOrStdout()
-			if changed {
-				fmt.Fprintf(w, "Removed Karvan's hooks from %s.\n", app.Env.ClaudeSettings())
-				if backup != "" {
-					fmt.Fprintf(w, "The previous file is kept as %s.\n", backup)
-				}
-			} else {
-				fmt.Fprintln(w, "No Karvan hooks to remove.")
-			}
-			return nil
-		},
-	}
-}
-
 func newVersionCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
@@ -204,6 +173,17 @@ func newVersionCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// short is the bare version recorded in manifests ("dev" for local builds).
+func (b Build) short() string {
+	if b.Version != "" {
+		return b.Version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return bi.Main.Version
+	}
+	return "dev"
 }
 
 // String is the one-line version, e.g.

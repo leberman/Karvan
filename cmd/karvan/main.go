@@ -3,7 +3,9 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"time"
 
 	"github.com/leberman/karvan/internal/cli"
 	"github.com/leberman/karvan/internal/paths"
@@ -27,6 +29,13 @@ func main() {
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 		Build:  cli.Build{Version: version, Commit: commit, Date: date},
+		DialCheck: func(hp string) error {
+			c, err := net.DialTimeout("tcp", hp, 5*time.Second)
+			if err == nil {
+				c.Close()
+			}
+			return err
+		},
 	}
 	os.Exit(cli.Run(app, os.Args[1:]))
 }
