@@ -116,22 +116,9 @@ func (s *Store) Head() plumbing.Hash {
 // us detect a rewound (force-pushed) remote.
 func (s *Store) Fetch(ctx context.Context) (plumbing.Hash, error) {
 	before := s.Head()
-	remote, err := s.repo.Remote(remoteName)
+	head, err := s.remoteHead(ctx)
 	if err != nil {
 		return plumbing.ZeroHash, err
-	}
-	refs, err := remote.ListContext(ctx, &git.ListOptions{Auth: s.auth})
-	if errors.Is(err, transport.ErrEmptyRemoteRepository) {
-		refs, err = nil, nil
-	}
-	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("ls-remote: %w", err)
-	}
-	var head plumbing.Hash
-	for _, r := range refs {
-		if r.Name() == s.branchRef() {
-			head = r.Hash()
-		}
 	}
 	if head.IsZero() {
 		if !before.IsZero() {
@@ -172,6 +159,28 @@ func (s *Store) Fetch(ctx context.Context) (plumbing.Hash, error) {
 		}
 	}
 	return head, nil
+}
+
+// remoteHead asks the remote where our branch is right now (ls-remote);
+// ZeroHash if the repository or the branch does not exist yet.
+func (s *Store) remoteHead(ctx context.Context) (plumbing.Hash, error) {
+	remote, err := s.repo.Remote(remoteName)
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+	refs, err := remote.ListContext(ctx, &git.ListOptions{Auth: s.auth})
+	if errors.Is(err, transport.ErrEmptyRemoteRepository) {
+		return plumbing.ZeroHash, nil
+	}
+	if err != nil {
+		return plumbing.ZeroHash, fmt.Errorf("ls-remote: %w", err)
+	}
+	for _, r := range refs {
+		if r.Name() == s.branchRef() {
+			return r.Hash(), nil
+		}
+	}
+	return plumbing.ZeroHash, nil
 }
 
 // isAncestor reports whether old is reachable from new. With a shallow clone
@@ -390,29 +399,29 @@ func (s *Store) Push(ctx context.Context, newHead, expectedOld plumbing.Hash) er
 	case err == nil:
 	case errors.Is(err, git.NoErrAlreadyUpToDate):
 		return nil
-	case isRejection(err):
-		return fmt.Errorf("%w (%v)", ErrRejected, err)
+	case errors.Is(err, git.ErrForceNeeded), strings.Contains(err.Error(), "required to be"):
+		// go-git's own client-side checks: the remote moved since our fetch.
+		return fmt.Errorf("%w: %w", ErrRejected, err)
 	default:
-		return fmt.Errorf("push: %w", err)
+		// The server refused the ref update. Its wording depends on the git
+		// version ("failed to update ref", "cannot lock ref", and in git 2.56
+		// "reference already exists" / "incorrect old value provided"), so we
+		// do not parse it: we look at where the branch is now (finding 8 in
+		// README). Moved by someone else = rejection, retry. At our commit =
+		// the push landed after all. Unchanged = a real refusal.
+		now, lerr := s.remoteHead(ctx)
+		switch {
+		case lerr != nil:
+			return fmt.Errorf("push: %w (and could not re-check the remote: %w)", err, lerr)
+		case now == newHead:
+		case now != expectedOld:
+			return fmt.Errorf("%w: %w", ErrRejected, err)
+		default:
+			return fmt.Errorf("push: %w", err)
+		}
 	}
 	// Our push is now the remote head; record it so the next Commit builds on it.
 	return s.repo.Storer.SetReference(plumbing.NewHashReference(s.trackingRef(), newHead))
-}
-
-func isRejection(err error) bool {
-	if errors.Is(err, git.ErrForceNeeded) {
-		return true
-	}
-	m := err.Error()
-	// "failed to update ref" / "cannot lock ref": another push landed between
-	// the server's ref advertisement and its ref update (see README).
-	for _, needle := range []string{"required to be", "non-fast-forward", "fetch first", "rejected", "stale info",
-		"failed to update ref", "cannot lock ref"} {
-		if strings.Contains(m, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 // Update is the store's conditional write as Karvan will use it: fetch, let
