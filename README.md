@@ -5,7 +5,7 @@ the desktop app's session list, memory, skills and, optionally, unfinished proje
 
 > Unofficial tool, not made or endorsed by Anthropic.
 
-**Status:** design. See [docs/PRD.md](docs/PRD.md). First release: Linux; Windows and macOS later.
+**Status:** design. See [docs/PRD.md](docs/PRD.md) (in Persian). Written in Go. First release: Linux; Windows and macOS later.
 
 ## License
 
