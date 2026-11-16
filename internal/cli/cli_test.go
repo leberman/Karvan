@@ -19,10 +19,11 @@ func newApp(t *testing.T) (*App, *bytes.Buffer, *bytes.Buffer) {
 	home := t.TempDir()
 	var out, errb bytes.Buffer
 	return &App{
-		Env:    paths.Env{GOOS: "linux", Home: home, Getenv: func(string) string { return "" }},
-		Stdout: &out,
-		Stderr: &errb,
-		Build:  Build{Version: "1.2.3", Commit: "abcdef0123456789", Date: "2026-11-20"},
+		NoSpawn: true,
+		Env:     paths.Env{GOOS: "linux", Home: home, Getenv: func(string) string { return "" }},
+		Stdout:  &out,
+		Stderr:  &errb,
+		Build:   Build{Version: "1.2.3", Commit: "abcdef0123456789", Date: "2026-11-20"},
 	}, &out, &errb
 }
 
@@ -70,7 +71,7 @@ func TestHelpAndVersion(t *testing.T) {
 }
 
 func TestStubsExitNotImplemented(t *testing.T) {
-	for _, args := range [][]string{{"init"}, {"sync"}, {"restore"}, {"restore", "home"}} {
+	for _, args := range [][]string{{"init"}, {"restore"}, {"restore", "home"}} {
 		app, _, errb := newApp(t)
 		if code := Run(app, args); code != ExitNotImplemented {
 			t.Errorf("%v: exit %d, want %d", args, code, ExitNotImplemented)
@@ -104,7 +105,7 @@ func TestStatus(t *testing.T) {
 	if code := Run(app, []string{"status"}); code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
-	for _, want := range []string{"machine:      work", "git ssh://git@ssh.github.com:443/o/store.git (branch main)", "last sync:    never"} {
+	for _, want := range []string{"machine:      work", "git ssh://git@ssh.github.com:443/o/store.git (branch main)", "last sync:    never; run `karvan sync`"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("status missing %q:\n%s", want, out)
 		}

@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"sort"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -35,10 +38,71 @@ func newStatusCmd(app *App) *cobra.Command {
 			fmt.Fprintf(w, "projects:     %d\n", len(cfg.Projects))
 			fmt.Fprintf(w, "Claude Code:  %s\n", app.Env.ClaudeHome())
 			fmt.Fprintf(w, "desktop app:  %s\n", app.Env.DesktopDataDir())
-			fmt.Fprintln(w, "last sync:    never (the sync engine arrives in M0 phase 3)")
+			printLastRun(w, app, cfg)
 			return nil
 		},
 	}
+}
+
+func ago(t, now time.Time) string {
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%d min ago", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%d h ago", int(d.Hours()))
+	}
+	return fmt.Sprintf("%d days ago", int(d.Hours()/24))
+}
+
+func printLastRun(w io.Writer, app *App, cfg *config.Config) {
+	var last LastRun
+	b, err := os.ReadFile(statusFile(app))
+	if err != nil || json.Unmarshal(b, &last) != nil || last.Report == nil {
+		fmt.Fprintln(w, "last sync:    never; run `karvan sync`")
+		return
+	}
+	now := time.Now()
+	rep := last.Report
+	result := "ok"
+	if last.Error != "" {
+		result = "FAILED: " + last.Error
+	}
+	fmt.Fprintf(w, "last sync:    %s (%s, %s)\n", ago(last.When, now), last.Mode, result)
+	if rep.Sent+rep.Received+rep.Merged+rep.Deleted > 0 {
+		fmt.Fprintf(w, "              %d sent, %d received, %d merged, %d deleted\n", rep.Sent, rep.Received, rep.Merged, rep.Deleted)
+	}
+	if len(rep.Machines) > 0 {
+		fmt.Fprintln(w, "other machines:")
+		for _, name := range sortedNames(rep.Machines) {
+			m := rep.Machines[name]
+			fmt.Fprintf(w, "  %-12s last sync %s (Karvan %s)\n", name, ago(m.WrittenAt, now), m.Karvan)
+		}
+	}
+	for _, c := range rep.Conflicts {
+		fmt.Fprintf(w, "conflict:     %s: the other version is kept as %s; merge them by hand and delete the copy\n", c.Path, c.Copy)
+	}
+	for _, d := range rep.Deferred {
+		fmt.Fprintf(w, "waiting:      %s (%s)\n", d.Path, d.Reason)
+	}
+	for _, wn := range rep.Warnings {
+		fmt.Fprintf(w, "warning:      %s\n", wn)
+	}
+	if rep.Unplaced > 0 {
+		fmt.Fprintf(w, "not here:     %d file(s) belong to projects not set up on this machine; add them with `karvan init`\n", rep.Unplaced)
+	}
+	_ = cfg
+}
+
+func sortedNames[T any](m map[string]T) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func describeStore(s config.Store) string {

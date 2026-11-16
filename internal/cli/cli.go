@@ -48,6 +48,8 @@ type App struct {
 	// Exe is the absolute path hooks and timers should run; empty means
 	// os.Executable().
 	Exe string
+	// NoSpawn stops background runs from being started (tests).
+	NoSpawn bool
 
 	configPath string // --config; empty = Env.ConfigFile()
 }
@@ -164,26 +166,6 @@ func newInitCmd(_ *App) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  func(*cobra.Command, []string) error { return notImplemented("init", 2) },
 	}
-}
-
-func newSyncCmd(_ *App) *cobra.Command {
-	var hook string
-	cmd := &cobra.Command{
-		Use:   "sync",
-		Short: "Sync now",
-		Args:  cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			switch hook {
-			case "", "session-start", "session-end":
-			default:
-				return usageError{fmt.Errorf("--hook %q: must be session-start or session-end", hook)}
-			}
-			return notImplemented("sync", 3)
-		},
-	}
-	cmd.Flags().StringVar(&hook, "hook", "", "called from a Claude Code hook (session-start or session-end)")
-	_ = cmd.Flags().MarkHidden("hook")
-	return cmd
 }
 
 func newUninstallCmd(app *App) *cobra.Command {
