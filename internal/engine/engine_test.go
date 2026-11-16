@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	gogit "github.com/go-git/go-git/v5"
 
 	"github.com/leberman/karvan/internal/engine"
 	"github.com/leberman/karvan/internal/sources"
@@ -311,4 +314,60 @@ func TestGarbageCollection(t *testing.T) {
 	if home.read("skills/s/SKILL.md") != "final\n" {
 		t.Fatal("GC removed a referenced blob")
 	}
+}
+
+func gitStore(t *testing.T) store.Store {
+	dir := filepath.Join(t.TempDir(), "store.git")
+	if _, err := gogit.PlainInit(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	st := &store.Git{URL: "file://" + dir, Branch: "main", Dir: filepath.Join(t.TempDir(), "cache"), Machine: "init"}
+	if _, err := engine.InitStore(context.Background(), st, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// PRD 15 #10: two machines push at the same moment; one is rejected,
+// re-reads, re-decides and pushes; nothing is lost.
+func TestGitConcurrentSync(t *testing.T) {
+	url := gitStore(t).(*store.Git).URL
+	mk := func(name string) *machine {
+		st := &store.Git{URL: url, Branch: "main", Dir: filepath.Join(t.TempDir(), "cache"), Machine: name}
+		m := newMachine(t, name, st)
+		return m
+	}
+	work, home := mk("work"), mk("home")
+	// Share one clock between the two (different store values).
+	home.clk = work.clk
+	work.write("CLAUDE.md", "a\nb\nc\n")
+	work.sync()
+	home.sync()
+	work.write("CLAUDE.md", "A\nb\nc\n")
+	home.write("skills/h/SKILL.md", "from home\n")
+	home.write("CLAUDE.md", "a\nb\nC\n")
+	var wg sync.WaitGroup
+	reps := make([]*engine.Report, 2)
+	for i, m := range []*machine{work, home} {
+		wg.Add(1)
+		go func(i int, m *machine) {
+			defer wg.Done()
+			rep, err := m.eng.Run(context.Background(), engine.Options{})
+			if err != nil {
+				t.Errorf("%s: %v", m.name, err)
+			}
+			reps[i] = rep
+		}(i, m)
+	}
+	wg.Wait()
+	for round := 0; round < 2; round++ {
+		work.sync()
+		home.sync()
+	}
+	for _, m := range []*machine{work, home} {
+		if m.read("CLAUDE.md") != "A\nb\nC\n" || m.read("skills/h/SKILL.md") != "from home\n" {
+			t.Fatalf("%s: %q %q", m.name, m.read("CLAUDE.md"), m.read("skills/h/SKILL.md"))
+		}
+	}
+	t.Logf("attempts: work %d, home %d", reps[0].Attempts, reps[1].Attempts)
 }
