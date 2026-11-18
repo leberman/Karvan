@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/url"
+	"os"
+	"os/exec"
 	"strings"
 
 	git "github.com/go-git/go-git/v5"
@@ -77,6 +79,25 @@ var ErrNoRemote = errors.New("no git remote")
 // Detect returns the project ID for a folder: its normalized "origin" (or
 // first) remote. No git binary is used.
 func Detect(dir string) (string, error) {
+	// The git command reads every repository git itself can; go-git cannot
+	// open some (newer extensions, unusual configs), so try git first.
+	if out, err := gitCmd(dir, "remote"); err == nil {
+		names := strings.Fields(out)
+		pick := ""
+		for _, n := range names {
+			if n == "origin" || pick == "" {
+				pick = n
+			}
+		}
+		if pick != "" {
+			if u, err := gitCmd(dir, "remote", "get-url", pick); err == nil {
+				if id, ok := NormalizeRemote(strings.TrimSpace(u)); ok {
+					return id, nil
+				}
+			}
+		}
+		return "", ErrNoRemote
+	}
 	repo, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{DetectDotGit: true, EnableDotGitCommonDir: true})
 	if err != nil {
 		return "", ErrNoRemote
@@ -97,6 +118,24 @@ func Detect(dir string) (string, error) {
 		}
 	}
 	return "", ErrNoRemote
+}
+
+func gitCmd(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
+	out, err := cmd.Output()
+	return string(out), err
+}
+
+// IsRepo reports whether dir is inside a git working tree.
+func IsRepo(dir string) bool {
+	if out, err := gitCmd(dir, "rev-parse", "--is-inside-work-tree"); err == nil {
+		return strings.TrimSpace(out) == "true"
+	} else if _, lookErr := exec.LookPath("git"); lookErr == nil {
+		return false
+	}
+	_, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{DetectDotGit: true, EnableDotGitCommonDir: true})
+	return err == nil
 }
 
 // NameID is the ID of a project without a remote.

@@ -87,17 +87,19 @@ func TestInitInteractive(t *testing.T) {
 	b := filepath.Join(app.Env.Home, "b")
 	mkdir(t, a)
 	mkdir(t, b)
+	gitT(t, a, "init", "--quiet")
 	writeOld(t, filepath.Join(app.Env.ClaudeProjectDir(a), "s.jsonl"), tline("u", "", a, "09:00:00")+"\n")
 	writeOld(t, filepath.Join(app.Env.ClaudeProjectDir(b), "s.jsonl"), tline("u", "", b, "09:00:00")+"\n")
 	answers := strings.Join([]string{
-		"Bad Name", // invalid, asked again
-		"desk",
-		"2",      // folder store
-		storeDir, // folder
-		"n",      // not all projects
-		"y",      // first one
-		"n",      // second one
-		"y",      // carry unfinished work
+		"Bad_Name",      // invalid (underscore), asked again
+		"\u200fDesk",    // a direction mark and capitals are cleaned up
+		"2",             // folder store
+		"relative/path", // refused: not a full path
+		storeDir,        // folder
+		"n",             // not all projects
+		"n",             // ~/b (newest first)
+		"y",             // ~/a
+		"y",             // carry unfinished work
 	}, "\n") + "\n"
 	var out strings.Builder
 	if err := runInit(context.Background(), app, strings.NewReader(answers), &out, initFlags{noSync: true}); err != nil {

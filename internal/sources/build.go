@@ -52,7 +52,7 @@ func Build(cfg *config.Config, env paths.Env) ([]engine.Source, map[string]manif
 			out = append(out, &Dir{Label: "memory " + nameOf(p), Prefix: "project:" + pid + "/memory/", Root: env.Join(cdir, "memory")})
 		}
 		tps = append(tps, TranscriptProject{PID: pid, Path: p.Path, Dir: cdir})
-		if p.WIP {
+		if p.WIP && project.IsRepo(p.Path) {
 			wips = append(wips, WIPProject{PID: pid, ID: p.ID, Path: p.Path})
 		}
 	}

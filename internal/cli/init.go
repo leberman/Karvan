@@ -126,13 +126,13 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 
 	// 1. Machine name.
 	if f.machine != "" {
-		cfg.Machine = f.machine
+		cfg.Machine = cleanName(f.machine)
 	}
 	if cfg.Machine == "" {
 		host, _ := os.Hostname()
 		def := config.MachineNameFrom(host)
 		for {
-			cfg.Machine = p.ask("Name for this machine (lowercase, e.g. work or home)", def)
+			cfg.Machine = cleanName(p.ask("Name for this machine (lowercase, e.g. work or home)", def))
 			if config.ValidMachineName(cfg.Machine) {
 				break
 			}
@@ -161,10 +161,30 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 		fmt.Fprintln(w, "  1) a private git repository (e.g. on GitHub), over SSH")
 		fmt.Fprintln(w, "  2) a folder that Dropbox, Google Drive, OneDrive or Syncthing keeps in sync")
 		if p.ask("Choose 1 or 2", "1") == "2" {
-			path := p.ask("Folder", "")
-			abs, err := filepath.Abs(expandHome(path, app.Env.Home))
-			if err != nil || path == "" {
-				return usageError{errors.New("a folder is required")}
+			fmt.Fprintln(w, "  The folder must be inside a folder your cloud service syncs; every machine then")
+			fmt.Fprintln(w, "  sees the same files. Karvan itself does not copy anything between machines here.")
+			def := ""
+			for _, c := range cloudFolders(app.Env.Home) {
+				fmt.Fprintf(w, "  found: %s\n", tildePath(c, app.Env.Home))
+				if def == "" {
+					def = tildePath(filepath.Join(c, "karvan"), app.Env.Home)
+				}
+			}
+			var abs string
+			for {
+				path := strings.TrimSpace(p.ask("Folder (full path, e.g. ~/Dropbox/karvan)", def))
+				if strings.HasPrefix(path, "~") || filepath.IsAbs(path) {
+					abs = filepath.Clean(expandHome(path, app.Env.Home))
+					break
+				}
+				if p.yes {
+					return usageError{errors.New("the folder must be a full path")}
+				}
+				fmt.Fprintln(w, "  Please give a full path (starting with / or ~/).")
+			}
+			if !insideCloud(abs, app.Env.Home) {
+				fmt.Fprintf(w, "  Note: %s is not inside a Dropbox, Google Drive, OneDrive or Syncthing folder Karvan knows.\n", tildePath(abs, app.Env.Home))
+				fmt.Fprintln(w, "  Your other machines will only see it if something syncs this folder.")
 			}
 			cfg.Store = config.Store{Kind: config.StoreFolder, Path: abs, Branch: "main"}
 		} else {
@@ -202,6 +222,7 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 	}
 	add := func(path string, wip bool) {
 		id, _ := project.IDFor(path)
+		wip = wip && project.IsRepo(path)
 		for _, pr := range cfg.Projects {
 			if pr.ID == id {
 				fmt.Fprintf(w, "  %s is already set up (at %s)\n", id, pr.Path)
@@ -222,7 +243,8 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 		}
 		add(abs, false)
 	}
-	found, _ := project.Discover(app.Env.ClaudeProjectsDir())
+	// The desktop app's scratch workspaces are not projects.
+	found, _ := project.Discover(app.Env.ClaudeProjectsDir(), app.Env.DesktopDataDir())
 	var news []project.Found
 	for _, fd := range found {
 		if !have[fd.Path] {
@@ -246,10 +268,16 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 			}
 		}
 	}
-	if fresh && len(cfg.Projects) > 0 && !p.yes {
+	repos := 0
+	for _, pr := range cfg.Projects {
+		if project.IsRepo(pr.Path) {
+			repos++
+		}
+	}
+	if fresh && repos > 0 && !p.yes {
 		if p.confirm("Also carry unfinished git work (uncommitted changes, unpushed commits) between machines?", false) {
 			for i := range cfg.Projects {
-				cfg.Projects[i].WIP = true
+				cfg.Projects[i].WIP = project.IsRepo(cfg.Projects[i].Path)
 			}
 		}
 	}
@@ -313,6 +341,39 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 	fmt.Fprintln(w, "\nDone. On your other computer, install Karvan and run `karvan init` with the same store.")
 	fmt.Fprintln(w, "Check things any time with `karvan status`.")
 	return nil
+}
+
+// cleanName lowercases a typed name and drops invisible characters (e.g.
+// direction marks a Persian keyboard can insert).
+func cleanName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		if r > ' ' && r < 0x7f {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// cloudFolders lists the usual cloud-synced folders that exist in home.
+func cloudFolders(home string) []string {
+	var out []string
+	for _, n := range []string{"Dropbox", "Google Drive", "GoogleDrive", "OneDrive", "Sync", "Syncthing", "Nextcloud", "pCloudDrive", "MEGA"} {
+		p := filepath.Join(home, n)
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func insideCloud(p, home string) bool {
+	for _, c := range cloudFolders(home) {
+		if p == c || strings.HasPrefix(p, c+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 func expandHome(p, home string) string {

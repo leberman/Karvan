@@ -25,7 +25,7 @@ type Found struct {
 // Discover lists the folders Claude Code has been used in, from
 // projectsDir (~/.claude/projects): each conversation records the folder it
 // ran in ("cwd"). Folders that no longer exist are left out. Newest first.
-func Discover(projectsDir string) ([]Found, error) {
+func Discover(projectsDir string, skip ...string) ([]Found, error) {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -56,6 +56,15 @@ func Discover(projectsDir string) ([]Found, error) {
 		if cwd == "" || seen[cwd] {
 			continue
 		}
+		skipped := false
+		for _, sp := range skip {
+			if sp != "" && (cwd == sp || strings.HasPrefix(cwd, sp+string(filepath.Separator))) {
+				skipped = true
+			}
+		}
+		if skipped {
+			continue
+		}
 		if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
 			continue
 		}
@@ -74,6 +83,20 @@ func IDFor(dir string) (string, bool) {
 	id, err := Detect(dir)
 	if err != nil {
 		return NameID(filepath.Base(dir)), false
+	}
+	if out, err := gitCmd(dir, "rev-parse", "--show-toplevel"); err == nil {
+		root := strings.TrimSpace(out)
+		if r, err := filepath.EvalSymlinks(root); err == nil {
+			root = r
+		}
+		d := dir
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			d = r
+		}
+		if rel, err := filepath.Rel(root, d); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+			id += "/" + filepath.ToSlash(rel)
+		}
+		return id, true
 	}
 	repo, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{DetectDotGit: true, EnableDotGitCommonDir: true})
 	if err == nil {
