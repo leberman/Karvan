@@ -74,7 +74,7 @@ func TestKnownHostsAndKeys(t *testing.T) {
 	if _, _, err := CreateKey(home, "x"); err == nil {
 		t.Fatal("overwrote a key")
 	}
-	msg := Explain(errors.New("authentication required: Repository not found."), "o/r", path)
+	msg := Explain(errors.New("authentication required: repository not found"), "o/r", path)
 	if !strings.Contains(msg, "https://github.com/settings/ssh/new") || !strings.Contains(msg, pub) {
 		t.Fatalf("%s", msg)
 	}
