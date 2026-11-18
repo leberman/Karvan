@@ -121,3 +121,16 @@ func TestInitRefusesPublicRepo(t *testing.T) {
 		t.Fatal(errb.String())
 	}
 }
+
+// Ctrl+D (end of input) at any question stops init without saving anything.
+func TestInitCtrlDCancels(t *testing.T) {
+	app, _, _ := newApp(t)
+	var out strings.Builder
+	err := runInit(context.Background(), app, strings.NewReader("desk\n"), &out, initFlags{noSync: true, noTimer: true})
+	if err == nil || !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("err = %v\n%s", err, out.String())
+	}
+	if _, err := os.Stat(app.ConfigPath()); !os.IsNotExist(err) {
+		t.Fatal("config saved after cancel")
+	}
+}

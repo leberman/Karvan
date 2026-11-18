@@ -77,6 +77,11 @@ type prompter struct {
 	yes bool
 }
 
+// errCancelled is raised (as a panic, caught in runInit) when the user ends
+// the input with Ctrl+D: stop, change nothing, so `karvan init` can be run
+// again from the start.
+var errCancelled = errors.New("canceled; nothing was changed. Run `karvan init` again to start over")
+
 func (p *prompter) ask(question, def string) string {
 	if p.yes {
 		return def
@@ -87,8 +92,12 @@ func (p *prompter) ask(question, def string) string {
 		fmt.Fprintf(p.out, "%s: ", question)
 	}
 	line, err := p.in.ReadString('\n')
+	if err != nil && strings.TrimSpace(line) == "" {
+		fmt.Fprintln(p.out)
+		panic(errCancelled)
+	}
 	line = strings.TrimSpace(line)
-	if line == "" || err != nil && line == "" {
+	if line == "" {
 		return def
 	}
 	return line
@@ -106,7 +115,15 @@ func (p *prompter) confirm(question string, def bool) bool {
 	return a == "y" || a == "yes"
 }
 
-func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFlags) error {
+func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFlags) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if r != errCancelled { //nolint:errorlint // sentinel identity
+				panic(r)
+			}
+			err = errCancelled
+		}
+	}()
 	if ctx == nil {
 		ctx = context.Background()
 	}

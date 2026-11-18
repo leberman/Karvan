@@ -39,7 +39,11 @@ main() {
   detect_downloader
 
   TMP="$(mktemp -d 2>/dev/null || mktemp -d -t karvan)"
-  trap 'rm -rf "$TMP"' EXIT INT TERM
+  BG_PID=""
+  # Ctrl+C (or a closed terminal) stops everything: the background job, the
+  # temporary files, and the script itself. Running it again starts clean.
+  trap cleanup EXIT
+  trap 'interrupted' INT TERM HUP
 
   installed=""
   if [ "${KARVAN_FROM_SOURCE:-0}" != "1" ]; then
@@ -57,9 +61,29 @@ main() {
   finish
 }
 
+# --------------------------------------------------------------- signals --
+
+cleanup() {
+  if [ -n "${BG_PID:-}" ]; then
+    kill "$BG_PID" 2>/dev/null || true
+  fi
+  rm -rf "${TMP:-}" "$INSTALL_DIR/.karvan.new" "$DATA_DIR/go.new" 2>/dev/null || true
+}
+
+interrupted() {
+  trap - EXIT INT TERM HUP
+  printf '\n%sCancelled.%s Nothing was changed; run the same command again to start over.\n' "${YELLOW:-}" "${RESET:-}" >&2
+  cleanup
+  exit 130
+}
+
 # ---------------------------------------------------------------- output --
 
 setup_colors() {
+  TTY=0
+  if [ -t 2 ]; then
+    TTY=1
+  fi
   if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     BOLD="$(printf '\033[1m')"; DIM="$(printf '\033[2m')"; RED="$(printf '\033[31m')"
     GREEN="$(printf '\033[32m')"; YELLOW="$(printf '\033[33m')"; RESET="$(printf '\033[0m')"
@@ -113,25 +137,68 @@ download() {
   url="$1"; out="$2"; tries=0
   while [ "$tries" -lt 5 ]; do
     tries=$((tries + 1))
+    rc=0
     if [ "$DL" = curl ]; then
-      if curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -C - -sS -o "$out" "$url" 2>"$TMP/dl.err"; then
-        return 0
+      if [ "$TTY" = 1 ]; then
+        curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -C - --progress-bar -o "$out" "$url" || rc=$?
+      else
+        curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -C - -sS -o "$out" "$url" || rc=$?
       fi
-      # curl exits 22 on HTTP errors (404...): retrying will not help.
-      if grep -q "The requested URL returned error: 4" "$TMP/dl.err" 2>/dev/null; then
-        return 1
-      fi
+      # 22 = HTTP error (404...): retrying will not help.
+      [ "$rc" -eq 0 ] && return 0
+      [ "$rc" -eq 22 ] && return 1
     else
-      if wget -q -c -T 20 -t 3 -O "$out" "$url" 2>"$TMP/dl.err"; then
-        return 0
+      if [ "$TTY" = 1 ]; then
+        wget -q --show-progress -c -T 20 -t 3 -O "$out" "$url" || rc=$?
+      else
+        wget -q -c -T 20 -t 3 -O "$out" "$url" || rc=$?
       fi
-      if grep -q "ERROR 4" "$TMP/dl.err" 2>/dev/null; then
-        return 1
-      fi
+      # 8 = the server answered with an error.
+      [ "$rc" -eq 0 ] && return 0
+      [ "$rc" -eq 8 ] && return 1
     fi
+    say "    download interrupted, retrying ($tries/5)..."
     sleep "$tries"
   done
   return 1
+}
+
+# probe URL: true if the file is there (quiet, first byte only).
+probe() {
+  if [ "$DL" = curl ]; then
+    curl -fsSL --connect-timeout 15 -r 0-0 -o /dev/null "$1" 2>/dev/null
+  else
+    wget -q -T 15 -t 1 --spider "$1" 2>/dev/null
+  fi
+}
+
+# with_spinner MESSAGE COMMAND...: runs a long step, showing that it is alive
+# and how long it has taken. Output goes to $TMP/step.log (shown on failure).
+with_spinner() {
+  msg="$1"; shift
+  "$@" >"$TMP/step.log" 2>&1 &
+  BG_PID=$!
+  start=$(date +%s)
+  if [ "$TTY" = 1 ]; then
+    i=0
+    while kill -0 "$BG_PID" 2>/dev/null; do
+      i=$(( (i + 1) % 4 ))
+      case $i in 0) c='.   ' ;; 1) c='..  ' ;; 2) c='... ' ;; *) c='....' ;; esac
+      printf '\r%s==>%s %s %s (%ss)  ' "$GREEN" "$RESET" "$msg" "$c" "$(( $(date +%s) - start ))" >&2
+      sleep 1
+    done
+  fi
+  rc=0
+  wait "$BG_PID" || rc=$?
+  BG_PID=""
+  result="done"
+  [ "$rc" -eq 0 ] || result="${RED}failed${RESET}"
+  if [ "$TTY" = 1 ]; then
+    printf '\r%s==>%s %s %s (%ss)   \n' "$GREEN" "$RESET" "$msg" "$result" "$(( $(date +%s) - start ))" >&2
+  else
+    step "$msg $result"
+  fi
+  return "$rc"
 }
 
 # fetch URL: prints the body (small files).
@@ -208,7 +275,9 @@ place_binary() {
 
 # go_ok GOBIN: true if that go is 1.$GO_MIN_MINOR or newer.
 go_ok() {
-  v="$("$1" env GOVERSION 2>/dev/null || true)"
+  # GOTOOLCHAIN=local: an old go with automatic toolchain switching reports
+  # the newer toolchain's version here, but the build below runs the old one.
+  v="$(GOTOOLCHAIN=local "$1" env GOVERSION 2>/dev/null || true)"
   v="${v#go}"
   major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"
   minor="${minor%%[!0-9]*}"
@@ -249,9 +318,13 @@ install_go() {
   ok=""
   # Several mirrors: go.dev is blocked or slow in some countries.
   for mirror in "https://go.dev/dl" "https://dl.google.com/go" "https://golang.google.cn/dl" "https://mirrors.aliyun.com/golang" "https://mirrors.ustc.edu.cn/golang"; do
-    say "    trying $mirror/$file"
     rm -f "$TMP/$file"
-    if download "$mirror/$file" "$TMP/$file" && tar -xzf "$TMP/$file" -C "$DATA_DIR/go.new" --strip-components=1 2>/dev/null; then
+    if ! probe "$mirror/$file"; then
+      say "    $mirror: not reachable from here, trying the next one"
+      continue
+    fi
+    say "    from $mirror"
+    if download "$mirror/$file" "$TMP/$file" && with_spinner "Unpacking Go" tar -xzf "$TMP/$file" -C "$DATA_DIR/go.new" --strip-components=1; then
       ok=1
       break
     fi
@@ -260,9 +333,13 @@ install_go() {
     # Last resort: the same release as a Go module zip from a module proxy.
     zip="v0.0.1-go${ver}.${OS}-${ARCH}.zip"
     for proxy in https://proxy.golang.org https://goproxy.cn https://goproxy.io; do
-      say "    trying $proxy (Go module mirror)"
       rm -f "$TMP/$zip"
-      if download "$proxy/golang.org/toolchain/@v/$zip" "$TMP/$zip" && unzip_to "$TMP/$zip" "$TMP/gozip"; then
+      if ! probe "$proxy/golang.org/toolchain/@v/$zip"; then
+        say "    $proxy: not reachable from here, trying the next one"
+        continue
+      fi
+      say "    from $proxy (Go module mirror)"
+      if download "$proxy/golang.org/toolchain/@v/$zip" "$TMP/$zip" && with_spinner "Unpacking Go" unzip_to "$TMP/$zip" "$TMP/gozip"; then
         src="$(find "$TMP/gozip" -maxdepth 2 -type d -name "toolchain@*" | head -n1)"
         if [ -n "$src" ] && [ -f "$src/bin/go" ]; then
           rm -rf "$DATA_DIR/go.new"
@@ -319,21 +396,28 @@ install_from_source() {
   export GOPROXY="${GOPROXY:-https://proxy.golang.org,https://goproxy.io,https://goproxy.cn,direct}"
   export GOFLAGS="-mod=readonly"
   export GOTOOLCHAIN=local
-  step "Downloading Go modules"
   n=0
-  until (cd "$TMP/src" && "$GO" mod download) 2>"$TMP/mod.err"; do
+  # shellcheck disable=SC2016 # expanded by the inner sh, on purpose
+  until with_spinner "Downloading Go modules (first time can take a minute)" sh -c 'cd "$1" && "$2" mod download' _ "$TMP/src" "$GO"; do
     n=$((n + 1))
+    # Only network trouble is worth retrying.
+    if ! grep -qiE "EOF|timeout|connection|reset|refused|TLS|unreachable|no such host|i/o|temporary|50[0-9]" "$TMP/step.log"; then
+      cat "$TMP/step.log" >&2
+      die "could not download Go modules (see above)."
+    fi
     if [ "$n" -ge 6 ]; then
-      cat "$TMP/mod.err" >&2
+      cat "$TMP/step.log" >&2
       die "could not download Go modules (network). Try again later, or set GOPROXY to a proxy that works for you."
     fi
     say "    network hiccup, retrying ($n/5)..."
     sleep $((n * 2))
   done
-  step "Building karvan"
   rev="$REF"
-  (cd "$TMP/src" && CGO_ENABLED=0 "$GO" build -trimpath -ldflags "-s -w -X main.version=source-$rev" -o "$TMP/karvan" ./cmd/karvan) ||
+  # shellcheck disable=SC2016 # expanded by the inner sh, on purpose
+  if ! with_spinner "Building karvan" sh -c 'cd "$1" && CGO_ENABLED=0 "$2" build -trimpath -ldflags "-s -w -X main.version=source-$3" -o "$4" ./cmd/karvan' _ "$TMP/src" "$GO" "$rev" "$TMP/karvan"; then
+    cat "$TMP/step.log" >&2
     die "the build failed (see above)"
+  fi
   place_binary "$TMP/karvan" || die "the built karvan does not run"
 }
 
