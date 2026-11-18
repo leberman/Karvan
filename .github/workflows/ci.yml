@@ -57,3 +57,33 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           args: release --snapshot --clean
+
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: shellcheck
+        run: shellcheck -s sh install.sh
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: build release files
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean
+      - name: install from a release (dash, clean HOME)
+        run: |
+          (cd dist && python3 -m http.server 8765 &) ; sleep 1
+          export HOME=$(mktemp -d)
+          env -i HOME=$HOME PATH=/usr/bin:/bin KARVAN_RELEASE_URL=http://127.0.0.1:8765 dash ./install.sh
+          $HOME/.local/bin/karvan version
+          grep -q "Karvan installer" $HOME/.profile
+      - name: install from source without Go (dash, clean HOME)
+        run: |
+          export HOME=$(mktemp -d)
+          env -i HOME=$HOME PATH=/usr/bin:/bin KARVAN_FROM_SOURCE=1 KARVAN_REF=${{ github.head_ref || github.ref_name }} dash ./install.sh
+          $HOME/.local/bin/karvan version

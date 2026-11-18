@@ -24,7 +24,9 @@ builds:
 archives:
   - id: karvan
     formats: [tar.gz]
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # No version in the name, so releases/latest/download/<name> always
+    # works for install.sh.
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
       - LICENSE-APACHE
@@ -56,4 +58,6 @@ changelog:
   disable: true
 
 release:
-  draft: true
+  draft: false
+  extra_files:
+    - glob: ./install.sh
