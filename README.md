@@ -3,8 +3,6 @@
 Continue your Claude Code work on any of your computers, exactly where you left it: chat history,
 the desktop app's session list, memory, skills and, optionally, unfinished project work.
 
-> Unofficial tool, not made or endorsed by Anthropic.
-
 **Status:** M0 (feature parity with the bash prototype) is code-complete and tested end to end; it is being
 tried on real machines. Data is **not encrypted yet** (M1): use a private repository or a private folder.
 

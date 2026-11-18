@@ -124,9 +124,7 @@ func newRoot(app *App) *cobra.Command {
 		Short: "Continue your Claude Code work on any of your computers",
 		Long: `Karvan syncs Claude Code chat history, the desktop app's session list,
 CLAUDE.md, skills, memory and (optionally) unfinished git work between your
-computers, through a private git repository or a synced folder.
-
-Unofficial tool, not made or endorsed by Anthropic.`,
+computers, through a private git repository or a synced folder.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       app.Build.String(),

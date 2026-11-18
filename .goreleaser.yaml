@@ -38,7 +38,7 @@ nfpms:
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}"
     homepage: https://github.com/leberman/karvan
     maintainer: leberman <leberman@users.noreply.github.com>
-    description: Continue your Claude Code work on any of your computers (unofficial).
+    description: Continue your Claude Code work on any of your computers.
     license: MIT OR Apache-2.0
     section: utils
     formats: [deb]
