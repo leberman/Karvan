@@ -2,9 +2,16 @@ name: Release
 
 # Push a tag like v0.1.0 to publish prebuilt binaries, a .deb, checksums.txt
 # and install.sh as a GitHub release. install.sh downloads from the latest one.
+# It can also be started by hand (Actions > Release > Run workflow) with a
+# version: it then creates the tag on the current main and releases it.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. v0.1.0"
+        required: true
 
 permissions:
   contents: write
@@ -21,6 +28,16 @@ jobs:
           go-version-file: go.mod
       - name: test before releasing
         run: go test ./...
+      - name: create the tag (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          case "$VERSION" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "version must look like v1.2.3"; exit 1 ;; esac
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Karvan $VERSION"
+          git push origin "refs/tags/$VERSION"
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
