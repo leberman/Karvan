@@ -20,6 +20,7 @@ import (
 	"github.com/leberman/karvan/internal/fsutil"
 	"github.com/leberman/karvan/internal/hooks"
 	"github.com/leberman/karvan/internal/project"
+	"github.com/leberman/karvan/internal/sshsetup"
 	"github.com/leberman/karvan/internal/systemd"
 )
 
@@ -35,6 +36,8 @@ type initFlags struct {
 	noSync      bool
 	allowPublic bool
 	projects    []string
+	// skipAccessCheck is for tests that use fake git URLs.
+	skipAccessCheck bool
 }
 
 func newInitCmd(app *App) *cobra.Command {
@@ -226,9 +229,22 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 			return err
 		}
 	}
+	if cfg.Store.Kind == config.StoreGit {
+		// Karvan talks to git over SSH; a GitHub https:// or git@ address
+		// becomes SSH on port 443, which also works where port 22 is blocked.
+		if u, ok := sshsetup.GitHubSSH(cfg.Store.URL); ok && u != cfg.Store.URL {
+			fmt.Fprintf(w, "  Using %s (SSH on port 443).\n", u)
+			cfg.Store.URL = u
+		}
+	}
 	if cfg.Store.Kind == config.StoreGit && !f.allowPublic {
 		if public, known := app.isPublicRepo(cfg.Store.URL); known && public {
 			return errors.New("that repository is PUBLIC: your conversations would be visible to everyone. Make it private, or pass --allow-public if you really mean it")
+		}
+	}
+	if cfg.Store.Kind == config.StoreGit && !f.skipAccessCheck {
+		if err := prepareGitAccess(ctx, app, p, w, cfg); err != nil {
+			return err
 		}
 	}
 
@@ -358,6 +374,63 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 	fmt.Fprintln(w, "\nDone. On your other computer, install Karvan and run `karvan init` with the same store.")
 	fmt.Fprintln(w, "Check things any time with `karvan status`.")
 	return nil
+}
+
+// prepareGitAccess makes sure this computer can reach the repository before
+// anything is saved: GitHub's host key, an SSH key (created if there is
+// none), and step-by-step help until GitHub lets the key in.
+func prepareGitAccess(ctx context.Context, app *App, p *prompter, w io.Writer, cfg *config.Config) error {
+	if !strings.HasPrefix(cfg.Store.URL, "ssh://") && !strings.Contains(cfg.Store.URL, "@") {
+		return nil // file:// and other local repositories need no SSH
+	}
+	github := strings.Contains(cfg.Store.URL, "github.com")
+	if github {
+		if added, err := sshsetup.EnsureGitHubHostKey(app.Env.Home); err != nil {
+			fmt.Fprintf(w, "  note: could not record GitHub's host key: %v\n", err)
+		} else if added {
+			fmt.Fprintf(w, "  Added GitHub's SSH host key to ~/.ssh/known_hosts (%s).\n", sshsetup.GitHubHostFingerprint)
+		}
+	}
+	keyFile := cfg.Store.SSHKey
+	if keyFile == "" {
+		keyFile = sshsetup.FindKey(app.Env.Home)
+	}
+	if keyFile == "" && os.Getenv("SSH_AUTH_SOCK") == "" {
+		fmt.Fprintln(w, "  This computer has no SSH key yet; GitHub needs one to let Karvan in.")
+		if !p.confirm("  Create one now (~/.ssh/id_ed25519)?", true) {
+			return errors.New("an SSH key is needed: create one with ssh-keygen -t ed25519, add it to GitHub, and run `karvan init` again")
+		}
+		path, _, err := sshsetup.CreateKey(app.Env.Home, "karvan@"+cfg.Machine)
+		if err != nil {
+			return err
+		}
+		keyFile = path
+		fmt.Fprintf(w, "  Created %s.\n", path)
+	}
+	repo := sshsetup.RepoPath(cfg.Store.URL)
+	for attempt := 1; ; attempt++ {
+		st, err := app.newStore(cfg)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "Checking access to %s...\n", st.Describe())
+		cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		_, err = st.Snapshot(cctx)
+		cancel()
+		if err == nil {
+			fmt.Fprintln(w, "  OK: this computer can read and write it.")
+			return nil
+		}
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, sshsetup.Explain(err, repo, keyFile))
+		if p.yes {
+			return fmt.Errorf("could not reach the store: %w", err)
+		}
+		fmt.Fprintln(w)
+		if a := strings.ToLower(p.ask("When that is done, press Enter to try again (or q to stop)", "")); a == "q" {
+			return errors.New("stopped; nothing was changed. Run `karvan init` again when the repository is ready")
+		}
+	}
 }
 
 // cleanName lowercases a typed name and drops invisible characters (e.g.

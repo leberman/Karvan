@@ -453,7 +453,12 @@ finish() {
   say "${GREEN}${BOLD}Karvan is installed:${RESET} $("$INSTALL_DIR/karvan" version)"
   say ""
   if [ -z "$PATH_OK" ]; then
-    say "Open a new terminal (or run: ${BOLD}export PATH=\"$INSTALL_DIR:\$PATH\"${RESET}), then:"
+    say "${YELLOW}${BOLD}One more step:${RESET} this terminal does not know the ${BOLD}karvan${RESET} command yet."
+    say "Copy and run this line (or simply open a new terminal):"
+    say ""
+    say "    ${BOLD}export PATH=\"$INSTALL_DIR:\$PATH\"${RESET}"
+    say ""
+    say "Then:"
   else
     say "Next:"
   fi
