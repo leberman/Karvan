@@ -35,7 +35,7 @@ func TestEndToEnd(t *testing.T) {
 		writeOld(t, filepath.Join(app.Env.ClaudeProjectDir(proj), "first-"+name+".jsonl"),
 			tline("first-"+name, "", proj, "08:00:00")+"\n")
 		out := run(t, app, "init", "--machine", name, "--git", url, "--project", proj, "--yes")
-		if !strings.Contains(out, "Done.") {
+		if !strings.Contains(out, "It is ready to use.") {
 			t.Fatalf("init on %s:\n%s", name, out)
 		}
 		return pc{app, proj}

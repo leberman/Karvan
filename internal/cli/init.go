@@ -371,9 +371,54 @@ func runInit(ctx context.Context, app *App, in io.Reader, w io.Writer, f initFla
 			fmt.Fprintf(w, "Installed a timer: syncs every %s and once more at logout and shutdown.\n", strings.TrimSuffix(cfg.Sync.Interval.String(), "0s"))
 		}
 	}
-	fmt.Fprintln(w, "\nDone. On your other computer, install Karvan and run `karvan init` with the same store.")
-	fmt.Fprintln(w, "Check things any time with `karvan status`.")
+	printSetupSummary(w, app, cfg, !f.noHooks, !f.noTimer && runtime.GOOS == "linux")
 	return nil
+}
+
+// printSetupSummary is the last thing `karvan init` prints: what is set up,
+// what now happens by itself, the everyday commands, and the next step.
+func printSetupSummary(w io.Writer, app *App, cfg *config.Config, hooksOn, timerOn bool) {
+	store := cfg.Store.URL
+	if cfg.Store.Kind == config.StoreFolder {
+		store = tildePath(cfg.Store.Path, app.Env.Home)
+	}
+	var names []string
+	for _, pr := range cfg.Projects {
+		n := pr.Name
+		if n == "" {
+			n = pr.ID
+		}
+		names = append(names, n)
+	}
+	projects := fmt.Sprintf("%d", len(names))
+	if len(names) > 0 {
+		projects += " (" + strings.Join(names, ", ") + ")"
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Karvan is set up on this computer (%s). It is ready to use.\n\n", cfg.Machine)
+	fmt.Fprintf(w, "  Store:     %s\n", store)
+	fmt.Fprintf(w, "  Projects:  %s\n", projects)
+	var when []string
+	if hooksOn {
+		when = append(when, "when a Claude Code session starts and ends")
+	}
+	if timerOn {
+		when = append(when, "every "+strings.TrimSuffix(cfg.Sync.Interval.String(), "0s"), "at logout and shutdown")
+	}
+	if len(when) > 0 {
+		fmt.Fprintf(w, "  Syncs by itself: %s.\n", strings.Join(when, ", "))
+	} else {
+		fmt.Fprintln(w, "  Syncs only when you run `karvan sync` (no hooks or timer installed).")
+	}
+	fmt.Fprintln(w, "\nCommands you can use now:")
+	fmt.Fprintln(w, "  karvan status    what was synced, your other computers, anything waiting")
+	fmt.Fprintln(w, "  karvan doctor    check that everything works")
+	fmt.Fprintln(w, "  karvan sync      sync right now")
+	fmt.Fprintln(w, "  karvan restore   bring unfinished git work from another computer")
+	fmt.Fprintln(w, "  karvan update    update Karvan")
+	fmt.Fprintln(w, "  karvan init      change settings or add projects (any time)")
+	fmt.Fprintln(w, "\nNext: on your other computer, run the same install line, then `karvan init`")
+	fmt.Fprintf(w, "with a different machine name and this store:\n  %s\n", store)
 }
 
 // prepareGitAccess makes sure this computer can reach the repository before

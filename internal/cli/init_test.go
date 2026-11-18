@@ -33,7 +33,9 @@ func TestInitNonInteractive(t *testing.T) {
 	storeDir := filepath.Join(t.TempDir(), "Dropbox", "karvan")
 
 	out := run(t, app, "init", "--machine", "laptop", "--folder", storeDir, "--yes")
-	for _, want := range []string{"Found 1 folder(s)", "+ name:my-app", "Added Karvan's SessionStart", "Prepared the new, empty store", "Synced in", "Installed a timer"} {
+	for _, want := range []string{"Found 1 folder(s)", "+ name:my-app", "Added Karvan's SessionStart", "Prepared the new, empty store", "Synced in", "Installed a timer",
+		"Karvan is set up on this computer (laptop). It is ready to use.", "Projects:  1 (my-app)", "Syncs by itself: when a Claude Code session starts and ends, every 10m",
+		"karvan doctor    check that everything works", "Next: on your other computer"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
