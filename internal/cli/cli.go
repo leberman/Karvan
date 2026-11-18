@@ -5,6 +5,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -55,6 +56,10 @@ type App struct {
 	PublicRepoCheck func(url string) (public, known bool)
 	// Systemctl replaces `systemctl --user` (tests).
 	Systemctl func(args ...string) ([]byte, error)
+	// UpdateCheck replaces the release lookup (tests).
+	UpdateCheck func(force bool) (string, error)
+	// Installer replaces running install.sh (tests).
+	Installer func(ctx context.Context, tag, exe string, w io.Writer) error
 	// DialCheck tests a TCP connection to host:port (doctor's network
 	// check); nil skips it.
 	DialCheck func(hostPort string) error
@@ -139,6 +144,7 @@ Unofficial tool, not made or endorsed by Anthropic.`,
 		newRestoreCmd(app),
 		newDoctorCmd(app),
 		newUninstallCmd(app),
+		newUpdateCmd(app),
 		newVersionCmd(app),
 	)
 	// Unknown subcommands and wrong argument counts are usage errors.

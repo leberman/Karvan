@@ -23,11 +23,12 @@ func newApp(t *testing.T) (*App, *bytes.Buffer, *bytes.Buffer) {
 	home := t.TempDir()
 	var out, errb bytes.Buffer
 	return &App{
-		NoSpawn: true,
-		Env:     paths.Env{GOOS: "linux", Home: home, Getenv: func(string) string { return "" }},
-		Stdout:  &out,
-		Stderr:  &errb,
-		Build:   Build{Version: "1.2.3", Commit: "abcdef0123456789", Date: "2026-11-20"},
+		NoSpawn:     true,
+		UpdateCheck: func(bool) (string, error) { return "", nil },
+		Env:         paths.Env{GOOS: "linux", Home: home, Getenv: func(string) string { return "" }},
+		Stdout:      &out,
+		Stderr:      &errb,
+		Build:       Build{Version: "1.2.3", Commit: "abcdef0123456789", Date: "2026-11-20"},
 	}, &out, &errb
 }
 

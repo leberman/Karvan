@@ -25,6 +25,7 @@ karvan init
 The installer downloads a prebuilt binary and checks its SHA-256. If that is not possible it builds from
 source, installing Go for Karvan only (no sudo) when needed. It retries on flaky networks, tries several
 mirrors, and adds `~/.local/bin` to your PATH. Options are at the top of [install.sh](install.sh).
+Update later with `karvan update`; `karvan status` tells you when a new release is out.
 
 User guide (Persian): [docs/guide.md](docs/guide.md). Design: [docs/PRD.md](docs/PRD.md),
 [docs/sync-engine.md](docs/sync-engine.md).

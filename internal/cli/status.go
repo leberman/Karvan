@@ -31,6 +31,9 @@ func newStatusCmd(app *App) *cobra.Command {
 			if errors.Is(err, config.ErrNotInitialized) {
 				fmt.Fprintf(w, "config:       %s (not found)\n", app.ConfigPath())
 				fmt.Fprintln(w, "Karvan is not set up on this machine yet: run `karvan init`.")
+				if n := app.updateNotice(); n != "" {
+					fmt.Fprintf(w, "update:       %s\n", n)
+				}
 				return nil
 			}
 			if err != nil {
@@ -43,6 +46,9 @@ func newStatusCmd(app *App) *cobra.Command {
 			fmt.Fprintf(w, "Claude Code:  %s\n", app.Env.ClaudeHome())
 			fmt.Fprintf(w, "desktop app:  %s\n", app.Env.DesktopDataDir())
 			printLastRun(w, app, cfg)
+			if n := app.updateNotice(); n != "" {
+				fmt.Fprintf(w, "update:       %s\n", n)
+			}
 			return nil
 		},
 	}
@@ -184,6 +190,11 @@ func (d *doctor) run(app *App) {
 	}
 
 	d.checkHooks(app)
+	if n := app.updateNotice(); n != "" {
+		d.info("%s", n)
+	} else if !isDevBuild(app.Build.short()) {
+		d.ok("version: %s is the latest", app.Build.short())
+	}
 
 	if cfg == nil {
 		return
