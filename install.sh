@@ -454,17 +454,18 @@ camel() {
   else
     T="$(printf '\033[38;5;180m')"; C="$(printf '\033[38;5;221m')"; S="$(printf '\033[38;5;30m')"; R="$(printf '\033[0m')"
   fi
+  # Text starts at column 30, as in karvan itself.
   printf '%s\n' "             ${C}[#][=]${R}"
   printf '%s\n' "${T}     ,_     _/${S}~~~~~${T}\\_${R}"
-  printf '%s\n' "${T}    (^ )___/         \\__${R}     ${BOLD}$1${RESET}"
-  printf '%s\n' "${T}     \\_       ~~~~      )${R}"
+  printf '%s%s\n' "${T}    (^ )___/         \\__${R}" "      ${BOLD}$1${RESET}"
+  printf '%s%s\n' "${T}     \\_       ~~~~      )${R}" "     ${DIM}$2${RESET}"
   printf '%s\n' "${T}       \\_______________/${R}"
   printf '%s\n' "${T}        ||  ||    ||  ||${R}"
 }
 
 finish() {
   say ""
-  camel "Karvan is installed!"
+  camel "Karvan is installed!" "Karvan $("$INSTALL_DIR/karvan" version | cut -d' ' -f2)"
   say ""
   say "${GREEN}${BOLD}Installed:${RESET} $("$INSTALL_DIR/karvan" version)"
   say ""

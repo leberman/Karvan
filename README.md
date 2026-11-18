@@ -4,47 +4,140 @@
 
 <h1 align="center">Karvan</h1>
 
-Continue your Claude Code work on any of your computers, exactly where you left it: chat history,
-the desktop app's session list, memory, skills and, optionally, unfinished project work.
+<p align="center">
+  <b>Sync Claude Code between your computers.</b><br>
+  Start a conversation at work, continue it at home with <code>claude --resume</code>, exactly where you left it.
+</p>
 
-**Status:** M0 (feature parity with the bash prototype) is code-complete and tested end to end; it is being
-tried on real machines. Data is **not encrypted yet** (M1): use a private repository or a private folder.
+<p align="center">
+  <a href="https://github.com/leberman/Karvan/actions/workflows/ci.yml"><img src="https://github.com/leberman/Karvan/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/leberman/Karvan/releases/latest"><img src="https://img.shields.io/github/v/release/leberman/Karvan" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-Linux-blue" alt="Linux">
+  <img src="https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-green" alt="License">
+</p>
 
-- Syncs Claude Code conversations (line-level merge: nothing is ever dropped), the desktop app's session
-  list, `CLAUDE.md`, skills, per-project memory, personal folders, and optionally unfinished git work.
-- Projects can live at different paths on each machine; Karvan finds them for you.
-- Store: a private git repository (built-in git, nothing to install; SSH on port 443 supported) or any
-  folder a cloud service syncs.
-- Automatic: Claude Code hooks plus a systemd timer.
+---
 
-## Install (Linux)
+If you use **Claude Code** on more than one computer (a work machine and a laptop, a desktop and a
+server), everything that makes a conversation useful stays on the machine where it happened: the chat
+history, your `CLAUDE.md`, your skills, each project's memory, and the half-finished code you were
+working on. **Karvan** (Persian for *caravan*) carries all of it between your computers, automatically.
+
+## Features
+
+- **Resume any conversation on any computer.** Conversations sync so `claude --resume` on one
+  machine lists the sessions from the others. If you continue the same conversation on two machines,
+  both sides are kept: Karvan merges them line by line and never drops a message.
+- **Claude desktop app support.** The Code tab's session list follows you too.
+- **Your setup everywhere.** `CLAUDE.md`, skills and per-project memory stay the same on every
+  machine, with three-way merging when two machines edit the same file. Per-machine instructions go in
+  `CLAUDE.machine.md`, which never leaves the machine.
+- **Unfinished git work (optional).** Branch, unpushed commits, staged and unstaged changes and new
+  files are saved; `karvan restore` brings them to the other machine. Karvan never commits, pushes,
+  stashes or resets in your project.
+- **Projects at different paths.** `~/work/app` here, `~/code/app` there: projects are recognised by
+  their git remote, and Karvan finds them for you.
+- **Automatic.** Claude Code hooks sync when a session starts and ends, a timer syncs every 10 minutes,
+  and once more at logout and shutdown.
+- **Your storage.** A private Git repository (GitHub, GitLab, any SSH remote; git is built in, nothing
+  to install) or any folder that Dropbox, Google Drive, OneDrive or Syncthing keeps in sync.
+- **Works on difficult networks.** SSH over port 443, retries, resumable downloads, several mirrors.
+
+## Quick start
+
+On your first computer:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/leberman/Karvan/main/install.sh | sh
 karvan init
 ```
 
-The installer downloads a prebuilt binary and checks its SHA-256. If that is not possible it builds from
-source, installing Go for Karvan only (no sudo) when needed. It retries on flaky networks, tries several
-mirrors, and adds `~/.local/bin` to your PATH. Options are at the top of [install.sh](install.sh).
-Update later with `karvan update`; `karvan status` tells you when a new release is out.
+`karvan init` asks a few questions: a name for this machine, where to keep your data (create an empty
+**private** repository such as `karvan-data` first), and which projects to sync (it finds the folders you
+used Claude Code in). It sets up SSH access for you if needed, installs the hooks and the timer, and syncs.
 
-User guide (Persian): [docs/guide.md](docs/guide.md). Design: [docs/PRD.md](docs/PRD.md),
-[docs/sync-engine.md](docs/sync-engine.md).
+On every other computer, run the same two commands, give the machine a different name and use the
+**same** repository. That's it.
 
-## Building
+The installer downloads a prebuilt binary and checks its SHA-256; if that is not possible it builds from
+source, installing Go for Karvan only (no sudo). Update any time with `karvan update`.
 
-Requires Go 1.26 or newer.
+## How it works
 
-```sh
-go build ./cmd/karvan       # binary: ./karvan
-go test ./...
-golangci-lint run           # v2, configured in .golangci.yml
-goreleaser release --snapshot --clean   # local .tar.gz and .deb in dist/
+```
+  work computer               your private repository              home computer
+  ~/.claude  ──karvan sync──►  manifests/work.krv   ◄──karvan sync──  ~/.claude
+                               manifests/home.krv
+                               blobs/… (compressed file contents)
 ```
 
-Configuration lives in `~/.config/karvan/config.toml` (per machine, never synced); `karvan doctor`
-checks it and the Claude Code folders.
+Each computer publishes a small manifest of what it has, plus the contents of new files. Every computer
+reads the others' manifests and brings its own files up to date. Karvan has its own sync engine: the
+repository is only storage, Git merges are never used, and nothing is ever force-pushed. Conflicts are
+resolved without losing data (conversations are merged line by line; text files are merged three-way,
+and if that is impossible both versions are kept side by side).
+
+The design is in [docs/sync-engine.md](docs/sync-engine.md).
+
+## What is synced
+
+| What | Where | Default |
+| ---- | ----- | ------- |
+| Conversations (last 7 days, configurable) | `~/.claude/projects/<project>/*.jsonl` | on |
+| Desktop app session list | `~/.config/Claude/claude-code-sessions/` | on |
+| Global instructions | `~/.claude/CLAUDE.md` | on |
+| Skills | `~/.claude/skills/` (except `synced/`) | on |
+| Project memory | `~/.claude/projects/<project>/memory/` | on |
+| Unfinished git work | your project's repository | off |
+| Personal folders | any folder you add | off |
+| `settings.json`, credentials, `.env`, `CLAUDE.machine.md` | | **never** |
+
+## Commands
+
+| Command | |
+| ------- | - |
+| `karvan init` | set up this computer, or change settings and add projects |
+| `karvan status` | last sync, your other computers, conflicts, anything waiting |
+| `karvan sync` | sync now |
+| `karvan restore` | bring unfinished git work from another computer |
+| `karvan doctor` | check the setup: hooks, timer, store access, network |
+| `karvan update` | update to the latest release |
+| `karvan uninstall` | remove hooks and timer (your data stays) |
+
+## Privacy and security
+
+- Karvan only talks to the storage **you** choose. There is no Karvan server.
+- `karvan init` refuses public GitHub repositories.
+- Credentials, `.env` files, `settings.json` and Claude's login state are never read or sent.
+- **Encryption is not in this version yet** (planned for the next milestone): until then, use a private
+  repository or a private folder only.
+
+## FAQ
+
+**Does it work with the Claude desktop app?** Yes: conversations from the Code tab and its session list
+sync. The app reads its list when it starts, so after new sessions arrive, quit it (Ctrl+Q) and reopen.
+
+**My network blocks SSH (port 22).** Use GitHub's SSH on port 443:
+`ssh://git@ssh.github.com:443/<you>/karvan-data.git`. `karvan init` does this for GitHub addresses.
+
+**What if I continue the same conversation on both machines?** Both continuations are kept in the
+conversation file; nothing is lost.
+
+**Windows / macOS?** Linux first; Windows and macOS are planned.
+
+## Roadmap
+
+- **M0** – feature parity with the original prototype (done)
+- **M1** – encryption (age), secret scanning before upload, multiple projects polish
+- **M2** – public Linux release: packages, docs
+- **M3** – cloud-folder storage for everyone, tray icon
+- **M4/M5** – Windows, macOS
+
+## Documentation
+
+- User guide (Persian): [docs/guide.md](docs/guide.md)
+- Sync engine specification (Persian): [docs/sync-engine.md](docs/sync-engine.md)
+- Product requirements (Persian): [docs/PRD.md](docs/PRD.md)
 
 ## License
 

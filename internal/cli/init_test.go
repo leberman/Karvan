@@ -149,7 +149,7 @@ func TestCamelOnlyInTerminal(t *testing.T) {
 	var buf strings.Builder
 	app.Stdout = &buf
 	app.showCamel(app.Stdout, moodHappy, "All good!")
-	if !strings.Contains(buf.String(), "(^ )") || !strings.Contains(buf.String(), "All good!") {
+	if !strings.Contains(buf.String(), "(^ )") || !strings.Contains(buf.String(), "All good!") || !strings.Contains(buf.String(), "Karvan ") {
 		t.Fatalf("%q", buf.String())
 	}
 	buf.Reset()
@@ -157,7 +157,7 @@ func TestCamelOnlyInTerminal(t *testing.T) {
 	if buf.Len() != 0 {
 		t.Fatal("printed to the wrong writer")
 	}
-	if !strings.Contains(camel(moodWorried, "x", false), "(o )") {
+	if !strings.Contains(camel(moodWorried, "x", "Karvan 0.1.4", false), "(o )") {
 		t.Fatal("worried eye")
 	}
 }
