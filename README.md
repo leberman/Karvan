@@ -1,4 +1,8 @@
-# Karvan
+<p align="center">
+  <img src="docs/assets/karvan.svg" width="220" alt="Karvan, a camel carrying your Claude Code work">
+</p>
+
+<h1 align="center">Karvan</h1>
 
 Continue your Claude Code work on any of your computers, exactly where you left it: chat history,
 the desktop app's session list, memory, skills and, optionally, unfinished project work.

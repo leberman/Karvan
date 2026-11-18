@@ -448,9 +448,25 @@ setup_path() {
   fi
 }
 
+camel() {
+  if [ "$TTY" != 1 ] || [ -n "${NO_COLOR:-}" ]; then
+    T=""; C=""; S=""; R=""
+  else
+    T="$(printf '\033[38;5;180m')"; C="$(printf '\033[38;5;221m')"; S="$(printf '\033[38;5;30m')"; R="$(printf '\033[0m')"
+  fi
+  printf '%s\n' "             ${C}[#][=]${R}"
+  printf '%s\n' "${T}     ,_     _/${S}~~~~~${T}\\_${R}"
+  printf '%s\n' "${T}    (^ )___/         \\__${R}     ${BOLD}$1${RESET}"
+  printf '%s\n' "${T}     \\_       ~~~~      )${R}"
+  printf '%s\n' "${T}       \\_______________/${R}"
+  printf '%s\n' "${T}        ||  ||    ||  ||${R}"
+}
+
 finish() {
   say ""
-  say "${GREEN}${BOLD}Karvan is installed:${RESET} $("$INSTALL_DIR/karvan" version)"
+  camel "Karvan is installed!"
+  say ""
+  say "${GREEN}${BOLD}Installed:${RESET} $("$INSTALL_DIR/karvan" version)"
   say ""
   if [ -z "$PATH_OK" ]; then
     say "${YELLOW}${BOLD}One more step:${RESET} this terminal does not know the ${BOLD}karvan${RESET} command yet."

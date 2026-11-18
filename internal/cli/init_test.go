@@ -136,3 +136,28 @@ func TestInitCtrlDCancels(t *testing.T) {
 		t.Fatal("config saved after cancel")
 	}
 }
+
+// The camel appears only in a real terminal, never in captured output.
+func TestCamelOnlyInTerminal(t *testing.T) {
+	app, _, _ := newApp(t)
+	mkdir(t, app.Env.ClaudeProjectsDir())
+	out := run(t, app, "doctor")
+	if strings.Contains(out, "~~~~~") {
+		t.Fatal("camel printed outside a terminal")
+	}
+	app.Terminal = true
+	var buf strings.Builder
+	app.Stdout = &buf
+	app.showCamel(app.Stdout, moodHappy, "All good!")
+	if !strings.Contains(buf.String(), "(^ )") || !strings.Contains(buf.String(), "All good!") {
+		t.Fatalf("%q", buf.String())
+	}
+	buf.Reset()
+	app.showCamel(&strings.Builder{}, moodHappy, "x") // not the terminal
+	if buf.Len() != 0 {
+		t.Fatal("printed to the wrong writer")
+	}
+	if !strings.Contains(camel(moodWorried, "x", false), "(o )") {
+		t.Fatal("worried eye")
+	}
+}

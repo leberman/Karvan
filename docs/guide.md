@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/karvan.svg" width="160" alt="Karvan"></p>
+
 # راهنمای Karvan
 
 Karvan کار شما با Claude Code را بین کامپیوترهایتان جابه‌جا می‌کند: گفتگوها (برای `claude --resume`)، فهرست

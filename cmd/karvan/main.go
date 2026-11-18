@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/leberman/karvan/internal/cli"
 	"github.com/leberman/karvan/internal/paths"
 )
@@ -25,10 +27,11 @@ func main() {
 		os.Exit(cli.ExitError)
 	}
 	app := &cli.App{
-		Env:    env,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-		Build:  cli.Build{Version: version, Commit: commit, Date: date},
+		Env:      env,
+		Stdout:   os.Stdout,
+		Stderr:   os.Stderr,
+		Build:    cli.Build{Version: version, Commit: commit, Date: date},
+		Terminal: term.IsTerminal(int(os.Stdout.Fd())),
 		DialCheck: func(hp string) error {
 			c, err := net.DialTimeout("tcp", hp, 5*time.Second)
 			if err == nil {

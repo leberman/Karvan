@@ -133,6 +133,12 @@ func newDoctorCmd(app *App) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			d := &doctor{w: cmd.OutOrStdout()}
 			d.run(app)
+			fmt.Fprintln(d.w)
+			if d.failed > 0 {
+				app.showCamel(d.w, moodWorried, fmt.Sprintf("%d thing(s) need a look (FAIL above).", d.failed))
+			} else {
+				app.showCamel(d.w, moodHappy, "All good!")
+			}
 			if d.failed > 0 {
 				return fmt.Errorf("%d check(s) failed", d.failed)
 			}

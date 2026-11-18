@@ -395,6 +395,7 @@ func printSetupSummary(w io.Writer, app *App, cfg *config.Config, hooksOn, timer
 		projects += " (" + strings.Join(names, ", ") + ")"
 	}
 	fmt.Fprintln(w)
+	app.showCamel(w, moodHappy, "Ready to carry your work!")
 	fmt.Fprintf(w, "Karvan is set up on this computer (%s). It is ready to use.\n\n", cfg.Machine)
 	fmt.Fprintf(w, "  Store:     %s\n", store)
 	fmt.Fprintf(w, "  Projects:  %s\n", projects)

@@ -60,6 +60,9 @@ type App struct {
 	UpdateCheck func(force bool) (string, error)
 	// Installer replaces running install.sh (tests).
 	Installer func(ctx context.Context, tag, exe string, w io.Writer) error
+	// Terminal is true when Stdout is an interactive terminal (the camel
+	// and other decoration are shown only then).
+	Terminal bool
 	// DialCheck tests a TCP connection to host:port (doctor's network
 	// check); nil skips it.
 	DialCheck func(hostPort string) error
